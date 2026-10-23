@@ -165,7 +165,7 @@ export const b7Lobby: Scenario = {
   code: 'A-02',
   name: 'B7 로비',
   type: 'place',
-  party: { min: 2, max: 4 },
+  party: { min: 2, max: 8 },
   map: { x: 44, y: 66 },
   blurb: '도면에 없는 지하 7층. 엘리베이터가 층 표시 없이 멈추면 카펫이 깔린 작은 로비가 나온다.',
   summary: '지하 6층 아래, 도면에 없는 층. 엘리베이터 문이 열리면 카펫이 깔린 작은 로비가 나온다. 조명은 일정한 간격으로 어두워진다.',
@@ -624,7 +624,7 @@ export const b7Lobby: Scenario = {
         },
       ],
       // 조사 라운드는 인원과 상관없이 두 번이다. 한 곳은 한 번만 살필 수 있고 곳이 칸보다 많아서, 무엇을 볼지 골라야 한다.
-      // (2명은 칸이 4개, 4명은 8개지만 4명은 같은 시간에 같은 단서를 더 나눠 가진다 — 사람이 많을수록 말로 맞춰야 할 것이 늘어난다.)
+      // (2명은 칸이 4개, 8명은 16개다. 5명 이상이면 한 라운드에 거의 모든 곳을 살필 수 있어 단서가 쉽게 모인다 — 큰 파티용 장치는 아직 없다.)
       next: [
         { when: { time: { min: 2 } }, to: 'gather' },
         { when: { all: [{ not: { flag: 'footsteps' } }, { time: { min: 1, max: 1 } }] }, to: 'event-footsteps' },

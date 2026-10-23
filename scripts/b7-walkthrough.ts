@@ -111,7 +111,7 @@ function play(seat: string, stairs: number, n: number, plan: Plan): ScenarioGame
 // 1) 의도한 풀이는 모든 판·모든 인원에서 진엔딩이다
 {
   let games = 0
-  for (const n of [2, 3, 4]) {
+  for (const n of [2, 3, 4, 6, 8]) {
     for (const seat of SEATS) {
       for (const stairs of STAIRS) {
         let g = play(seat, stairs, n, { phone: 'truth', greet: 'right', lift: 'still' })
@@ -123,7 +123,7 @@ function play(seat: string, stairs: number, n: number, plan: Plan): ScenarioGame
       }
     }
   }
-  console.log(`통과: 의도한 풀이로 진엔딩 (${games}판: 2~4명 × 소파 3 × 계단 3)`)
+  console.log(`통과: 의도한 풀이로 진엔딩 (${games}판: 2·3·4·6·8명 × 소파 3 × 계단 3)`)
 }
 
 // 2) 흔한 실수는 의도한 결말로 이어진다

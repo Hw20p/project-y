@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState } from 'react'
-import { MAX_NAME_LENGTH, ROOM_CODE_LENGTH } from '../net/protocol.ts'
+import { MAX_NAME_LENGTH, MAX_PLAYERS, ROOM_CODE_LENGTH } from '../net/protocol.ts'
 import { FxProvider } from './fx.tsx'
 import { Lobby } from './room/Lobby.tsx'
 import { ScenarioScreen } from './scenario/ScenarioScreen.tsx'
@@ -172,7 +172,7 @@ function Title({
       </p>
 
       <section className="mt-8 rounded border border-edge bg-panel/40 p-4">
-        <h2 className="text-sm text-fog">방에 모여 시작하기 (최대 4명)</h2>
+        <h2 className="text-sm text-fog">방에 모여 시작하기 (최대 {MAX_PLAYERS}명)</h2>
         <p className="mt-1 text-xs text-ash">혼자라면 방을 만들고 혼자 할 수 있는 대상을 고르면 된다. 여럿이라면 음성 채팅(디스코드 등)을 켜고 하는 것을 권한다.</p>
 
         <label className="mt-4 block text-xs text-ash">

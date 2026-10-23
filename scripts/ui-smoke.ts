@@ -103,9 +103,10 @@ try {
     const act = (a: ScenarioAction) => (g = reduceScenario(sc, g, a))
 
     const seen = new Set<string>()
+    let sawGrowth = false
     const renderFor = (id: string) => {
       const view = viewForScenario(sc, g, id)
-      const sig = [id, view.phase, view.scene?.kind, !!view.scene?.solo, view.scene?.mineDone, !!view.scene?.myChoiceId, view.result?.kind, !!view.aftermath.length].join('|')
+      const sig = [id, view.phase, view.scene?.kind, !!view.scene?.solo, view.scene?.mineDone, !!view.scene?.myChoiceId, view.result?.kind, !!view.aftermath.length, !!view.scene?.choices.some((c) => c.hints?.length)].join('|')
       if (seen.has(sig)) return
       seen.add(sig)
       const client = {
@@ -128,6 +129,8 @@ try {
       assert.ok(html.length > 500, `화면이 그려진다: ${sig}`)
       assert.ok(!html.includes('undefined'), `"undefined" 글자가 화면에 나오지 않는다: ${sig}`)
       assert.ok(!html.includes('[object'), `"[object" 글자가 화면에 나오지 않는다: ${sig}`)
+      // 밤의 선택지가 주는 성장(체력 +1, 정신력 +3 …)은 고르기 전에 알려 준다 (서술이 흐른 뒤에야 선택지가 그려지므로 화면이 아니라 보기에서 확인한다)
+      if (view.scene?.choices.some((c) => c.hints?.includes('체력 +1'))) sawGrowth = true
     }
 
     /** 지금 할 수 있는 첫 행동 (nettest의 step과 같은 규칙) */
@@ -178,6 +181,32 @@ try {
     renderFor('p2')
     act({ type: 'retry' })
     renderFor('p1')
+
+    assert.ok(sawGrowth, '밤 장면에 체력 +1 성장 표시가 나왔다')
+    // 8명 파티: 작은 카드로 줄어들고 접을 수 있다 (4명까지는 큰 카드 그대로)
+    {
+      const big = createScenarioGame(sc, { seed: 1, players: partyOf(8), vars: { seat: 'b', stairs: 11 } })
+      const bigClient = {
+        view: viewForScenario(sc, big, 'p1'),
+        send: () => {},
+        reading: [],
+        setReading: () => {},
+        online: {},
+        roomCode: 'ABCD',
+        isHost: true,
+        reconnecting: false,
+        journalKey: 'ui-smoke-8',
+        force: () => {},
+        retry: () => {},
+        rematch: () => {},
+      }
+      const html8 = render(h(FxProvider as never, null, h(ScenarioScreen as never, { client: bigClient, onExit: () => {}, exitLabel: '나가기' })))
+      assert.match(html8, /파티 8명/)
+      assert.match(html8, /접기/)
+      assert.equal((html8.match(/aria-label="파티원"/g) ?? []).length, 1)
+      const html2 = render(h(FxProvider as never, null, h(ScenarioScreen as never, { client: { ...bigClient, view: viewForScenario(sc, createScenarioGame(sc, { seed: 1, players: partyOf(4), vars: { seat: 'b', stairs: 11 } }), 'p1') }, onExit: () => {}, exitLabel: '나가기' })))
+      assert.ok(!html2.includes('접기'), '4명까지는 접기 버튼이 없다')
+    }
 
     const phases = new Set([...seen].map((x) => x.split('|')[1]))
     for (const p of ['story', 'personal', 'split', 'vote', 'result', 'ended']) assert.ok(phases.has(p), `${p} 단계 화면을 그려 봤다`)

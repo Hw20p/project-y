@@ -107,7 +107,7 @@ try {
   assert.equal(a.lobby!.mode, 'b7-lobby', '기본 대상은 B7 로비')
   assert.deepEqual(a.lobby!.modes.map((m) => m.id), ['b7-lobby'], '플레이할 수 있는 시나리오만 목록에 있다')
   assert.ok(a.lobby!.modes[0].map.x >= 0 && a.lobby!.modes[0].map.y <= 100, '지도 위치가 전해진다')
-  assert.deepEqual(a.lobby!.modes[0].party, { min: 2, max: 4 })
+  assert.deepEqual(a.lobby!.modes[0].party, { min: 2, max: 8 })
   assert.equal(a.lobby!.members[0].archetype, 'rookie')
 
   const b = new Client(url)
