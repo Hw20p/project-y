@@ -1,0 +1,23 @@
+# Project-Y 게임 서버 systemd 서비스 예시
+# 설치: sudo cp project-y.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now project-y
+#
+# - 서버는 하나의 JS 파일(main.mjs)로 묶여 올라오므로 Node 20 이상이면 된다 (`node --version`). nvm으로 깔았다면 ExecStart의 node를 `which node`가 알려 주는 전체 경로로 바꾼다.
+# - 127.0.0.1에만 묶어서 바깥에서는 nginx(/ws)를 거쳐서만 닿는다.
+# - 상태(방)는 메모리에만 있어서 재시작하면 진행 중인 방이 사라진다.
+[Unit]
+Description=Project-Y game server (WebSocket)
+After=network.target
+
+[Service]
+User=deploy
+WorkingDirectory=/home/deploy/apps/project-y/app
+Environment=PORT=8787
+Environment=HOST=127.0.0.1
+ExecStart=/usr/bin/node main.mjs
+Restart=always
+RestartSec=3
+# 재시작할 때 연결을 정리할 시간
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

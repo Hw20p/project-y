@@ -56,12 +56,16 @@ export function saveName(name: string): void {
   }
 }
 
-/** 서버 주소: 환경 변수 VITE_WS_URL, 없으면 같은 호스트의 8787 포트 */
+/**
+ * 서버 주소: 환경 변수 VITE_WS_URL이 있으면 그것. 없으면 개발 중에는 같은 호스트의 8787 포트,
+ * 배포된 화면에서는 같은 주소의 `/ws`다 (nginx가 서버 프로세스로 이어 주므로 https 아래에서는 wss가 된다).
+ */
 function serverUrl(): string {
   const env = import.meta.env.VITE_WS_URL as string | undefined
   if (env) return env
   const scheme = location.protocol === 'https:' ? 'wss' : 'ws'
-  return `${scheme}://${location.hostname}:8787`
+  if (import.meta.env.DEV) return `${scheme}://${location.hostname}:8787`
+  return `${scheme}://${location.host}/ws`
 }
 
 export type RemoteInit =
