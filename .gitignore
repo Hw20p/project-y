@@ -1,0 +1,29 @@
+# 의존성·빌드 결과
+node_modules
+dist
+dist-ssr
+coverage
+*.tsbuildinfo
+.vite
+
+# 로그
+logs
+*.log
+npm-debug.log*
+
+# 환경 변수 (서버 단계에서 쓸 비밀 값)
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Claude Code 로컬 설정 (개인별 권한 허용 목록 등)
+.claude/settings.local.json*
+
+# OS
+.DS_Store
+Thumbs.db
