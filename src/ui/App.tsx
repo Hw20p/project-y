@@ -1,20 +1,26 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { MAX_NAME_LENGTH, ROOM_CODE_LENGTH } from '../net/protocol.ts'
 import { FxProvider } from './fx.tsx'
-import { GameScreen } from './GameScreen.tsx'
-import { Lobby } from './Lobby.tsx'
-import { loadSaved, useLocalGame } from './useLocalGame.ts'
+import { Lobby } from './room/Lobby.tsx'
+import { ScenarioScreen } from './scenario/ScenarioScreen.tsx'
+import { loadScreen, saveScreen } from './storage.ts'
 import {
   loadName,
   loadSession,
   saveName,
   useRemoteGame,
   type RemoteInit,
-} from './useRemoteGame.ts'
+} from './room/useRemoteGame.ts'
+
+/**
+ * 개발 전용 화면(전수 탐색기). `import.meta.env.DEV`가 거짓인 빌드에서는 이 줄과 쓰는 곳이 통째로 지워져서
+ * 탐색기·시험용 시나리오가 배포 결과물에 들어가지 않는다.
+ */
+const ExplorerPage = import.meta.env.DEV ? lazy(() => import('./dev/ExplorerPage.tsx')) : null
 
 type Screen =
   | { kind: 'title' }
-  | { kind: 'local'; id: number; bots: number; resume: boolean }
+  | { kind: 'explorer' }
   | { kind: 'remote'; id: number; init: RemoteInit }
 
 export default function App() {
@@ -25,38 +31,44 @@ export default function App() {
   )
 }
 
-function Root() {
-  const [screen, setScreen] = useState<Screen>({ kind: 'title' })
-  const toTitle = () => setScreen({ kind: 'title' })
+/** 새로 고침하면 이 탭이 있던 게임 화면으로 바로 돌아온다 (저장된 판이 아직 있을 때만) */
+function initialScreen(): Screen {
+  const saved = loadScreen()
+  if (saved?.kind === 'remote') {
+    const session = loadSession()
+    if (session) return { kind: 'remote', id: Date.now(), init: { kind: 'rejoin', session } }
+  }
+  return { kind: 'title' }
+}
 
-  if (screen.kind === 'local') {
-    return <LocalGame key={screen.id} config={screen} onExit={toTitle} />
+function Root() {
+  const [screen, setScreen] = useState<Screen>(initialScreen)
+
+  const go = (next: Screen) => {
+    saveScreen(next.kind === 'remote' ? { kind: 'remote' } : null)
+    setScreen(next)
+  }
+  const toTitle = () => go({ kind: 'title' })
+
+  if (screen.kind === 'explorer' && ExplorerPage) {
+    return (
+      <Suspense fallback={<p className="p-6 text-sm text-ash">불러오는 중…</p>}>
+        <ExplorerPage onBack={toTitle} />
+      </Suspense>
+    )
   }
   if (screen.kind === 'remote') {
     return <RemoteGame key={screen.id} init={screen.init} onExit={toTitle} />
   }
   return (
     <Title
-      onLocal={(bots, resume) => setScreen({ kind: 'local', id: Date.now(), bots, resume })}
-      onRemote={(init) => setScreen({ kind: 'remote', id: Date.now(), init })}
+      onRemote={(init) => go({ kind: 'remote', id: Date.now(), init })}
+      onExplorer={import.meta.env.DEV ? () => setScreen({ kind: 'explorer' }) : undefined}
     />
   )
 }
 
-// ───────────────────────── 혼자 하기 ─────────────────────────
-
-function LocalGame({
-  config,
-  onExit,
-}: {
-  config: { bots: number; resume: boolean }
-  onExit: () => void
-}) {
-  const client = useLocalGame(config)
-  return <GameScreen client={client} onExit={onExit} exitLabel="처음 화면으로 (진행 상황은 저장되어 있다)" />
-}
-
-// ───────────────────────── 함께 하기 ─────────────────────────
+// ───────────────────────── 방 ─────────────────────────
 
 function Message({ title, text, action, onAction }: { title: string; text?: string; action: string; onAction: () => void }) {
   return (
@@ -89,6 +101,8 @@ function RemoteGame({ init, onExit }: { init: RemoteInit; onExit: () => void }) 
         lobby={room.lobby}
         notice={room.notice}
         onStart={room.start}
+        onMode={room.setMode}
+        onArchetype={room.setArchetype}
         onLeave={() => {
           room.leave()
           onExit()
@@ -97,19 +111,21 @@ function RemoteGame({ init, onExit }: { init: RemoteInit; onExit: () => void }) 
     )
   }
 
-  const client = room.client!
-  const ended = client.view.phase === 'ended'
   const leave = () => {
     room.leave()
     onExit()
   }
+
+  if (!room.scenario) return <Message title="서버에 연결하는 중…" action="취소" onAction={onExit} />
+  const sc = room.scenario
+  const done = sc.view.phase === 'ended'
   return (
     <>
-      <GameScreen
-        client={client}
-        onExit={ended ? leave : onExit}
-        exitLabel={ended ? '방 나가기' : '처음 화면으로 (이 방에는 다시 들어올 수 있다)'}
-        onLeave={ended ? undefined : () => window.confirm('방을 완전히 나갈까요? 다시 들어올 수 없습니다.') && leave()}
+      <ScenarioScreen
+        client={sc}
+        onExit={done ? leave : onExit}
+        exitLabel={done ? '방 나가기' : '처음 화면으로 (이 방에는 다시 들어올 수 있다)'}
+        onLeave={done ? undefined : () => window.confirm('방을 완전히 나갈까요? 다시 들어올 수 없습니다.') && leave()}
       />
       {room.notice && (
         <p className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded border border-loss/40 bg-ink px-4 py-2 text-sm text-loss shadow-lg">
@@ -123,19 +139,18 @@ function RemoteGame({ init, onExit }: { init: RemoteInit; onExit: () => void }) 
 // ───────────────────────── 시작 화면 ─────────────────────────
 
 function Title({
-  onLocal,
   onRemote,
+  onExplorer,
 }: {
-  onLocal: (bots: number, resume: boolean) => void
   onRemote: (init: RemoteInit) => void
+  /** 개발 서버에서만 주어진다 */
+  onExplorer?: () => void
 }) {
-  const [bots, setBots] = useState(0)
   const [name, setName] = useState(loadName)
   const [code, setCode] = useState(() => {
     const fromLink = new URLSearchParams(location.search).get('room')
     return (fromLink ?? '').toUpperCase().slice(0, ROOM_CODE_LENGTH)
   })
-  const saved = loadSaved()
   const session = loadSession()
   const trimmed = name.trim()
 
@@ -151,14 +166,14 @@ function Title({
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6 py-16">
       <p className="text-xs tracking-widest text-ash">PROJECT-Y</p>
-      <h1 className="mt-2 font-serif-kr text-3xl font-bold">한 달에 하나, 정체불명</h1>
+      <h1 className="mt-2 font-serif-kr text-3xl font-bold">이상현상, 정체불명</h1>
       <p className="mt-4 font-serif-kr leading-8 text-fog">
-        시설에서 대상을 한 달씩 조사한다. 낮에는 다 같이, 밤에는 각자 움직인다. 알아낸 것은 말로 나눠야 쓸모가 생긴다.
+        시설에서 대상을 조사한다. 낮에는 조사, 밤에는 개인정비. 알아낸 것은 말로 나눠야 쓸모가 생긴다.
       </p>
 
       <section className="mt-8 rounded border border-edge bg-panel/40 p-4">
-        <h2 className="text-sm text-fog">함께 하기 (최대 4명)</h2>
-        <p className="mt-1 text-xs text-ash">음성 채팅(디스코드 등)을 켜고 하는 것을 권한다.</p>
+        <h2 className="text-sm text-fog">방에 모여 시작하기 (최대 4명)</h2>
+        <p className="mt-1 text-xs text-ash">혼자라면 방을 만들고 혼자 할 수 있는 대상을 고르면 된다. 여럿이라면 음성 채팅(디스코드 등)을 켜고 하는 것을 권한다.</p>
 
         <label className="mt-4 block text-xs text-ash">
           내 이름
@@ -211,48 +226,16 @@ function Title({
         )}
       </section>
 
-      <section className="mt-4 rounded border border-edge bg-panel/40 p-4">
-        <h2 className="text-sm text-fog">혼자 하기</h2>
-        <div className="mt-3 space-y-2">
-          {saved && (
-            <button
-              type="button"
-              onClick={() => onLocal(saved.bots, true)}
-              className="w-full rounded border border-glow/50 bg-glow/10 px-4 py-2.5 text-left text-glow hover:bg-glow/20"
-            >
-              이어하기
-              <span className="ml-2 text-xs text-fog">
-                {saved.state.monthNumber}번째 달 · {saved.state.players.length}명
-              </span>
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => onLocal(bots, false)}
-            className="w-full rounded border border-edge bg-panel px-4 py-2.5 text-left hover:border-fog/50"
-          >
-            새로 시작
-          </button>
-
-          <label className="flex items-center justify-between rounded border border-edge/60 px-4 py-2 text-xs text-ash">
-            <span>
-              테스트용 봇 파티원
-              <span className="ml-1 text-ash/70">(멀티 화면 미리 보기)</span>
-            </span>
-            <select
-              value={bots}
-              onChange={(e) => setBots(Number(e.target.value))}
-              className="rounded border border-edge bg-ink px-2 py-1 text-base text-fog sm:text-xs"
-            >
-              {[0, 1, 2, 3].map((n) => (
-                <option key={n} value={n}>
-                  {n}명
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      </section>
+      {import.meta.env.DEV && onExplorer && (
+        <button
+          type="button"
+          onClick={onExplorer}
+          className="mt-4 rounded border border-dashed border-amber/50 px-4 py-2.5 text-left text-sm text-amber hover:bg-amber/5"
+        >
+          [개발] 시나리오 전수 탐색기
+          <span className="ml-2 text-xs text-amber/70">개발 서버에서만 보인다</span>
+        </button>
+      )}
     </div>
   )
 }

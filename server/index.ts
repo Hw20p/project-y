@@ -93,15 +93,35 @@ export function startServer(port: number): Promise<RunningServer> {
           if (!started.ok) send({ t: 'error', message: started.error })
           return
         }
-        case 'action':
-          room.act(member, msg.action)
+        case 'saction':
+          room.sact(member, msg.action)
           return
+        case 'mode': {
+          const set = room.setMode(member, msg.mode)
+          if (!set.ok) send({ t: 'error', message: set.error })
+          return
+        }
+        case 'archetype': {
+          const set = room.setArchetype(member, msg.archetype)
+          if (!set.ok) send({ t: 'error', message: set.error })
+          return
+        }
+        case 'retry': {
+          const again = room.retry(member)
+          if (!again.ok) send({ t: 'error', message: again.error })
+          return
+        }
         case 'reading':
           room.setReading(member, msg.reading)
           return
         case 'force':
           room.force(member)
           return
+        case 'rematch': {
+          const again = room.rematch(member)
+          if (!again.ok) send({ t: 'error', message: again.error })
+          return
+        }
         case 'leave': {
           const r = room
           const m = member
