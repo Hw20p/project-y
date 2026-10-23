@@ -1,4 +1,5 @@
 // 시나리오 화면의 작은 부품들: 변화 칩, 파티 줄(스텟), 계속 버튼, 건너뛰기 안내.
+import { useState } from 'react'
 import type { Change } from '../../scenario/state.ts'
 import { ARCHETYPES, STAT_LABEL, STAT_MAX } from '../../scenario/stats.ts'
 import type { ScenarioView } from '../../scenario/view.ts'
@@ -115,7 +116,44 @@ export function Continue({
   )
 }
 
-/** 파티 줄: 이름·입사 배경·스텟(정신력 막대 + 나머지 숫자)·상태. 모두에게 같은 정보가 보인다. */
+/** 파티 한 사람의 현재 상태 표시: 무엇을 하고 있는지 */
+function partyTag(
+  view: ScenarioView,
+  p: ScenarioView['players'][number],
+  reading: string[],
+  online: Record<string, boolean>,
+): { tag: string; tone: string } {
+  const waitingOnChoice = view.phase === 'vote' || view.phase === 'split'
+  const waitingOnReady = view.phase === 'story' || view.phase === 'result'
+  if (online[p.id] === false) return { tag: '연결 끊김', tone: 'text-amber' }
+  if (p.panic) return { tag: '정신을 잃음', tone: 'text-loss' }
+  if (waitingOnChoice) {
+    if (p.acted) return { tag: '선택함', tone: 'text-gain' }
+    if (reading.includes(p.id)) return { tag: '읽는 중', tone: 'text-glow' }
+    return { tag: '고민 중', tone: 'text-ash' }
+  }
+  if (view.phase === 'personal') {
+    if (p.progress === 'done') return { tag: '끝남', tone: 'text-gain' }
+    if (p.progress === 'picked') return { tag: '선택함', tone: 'text-gain' }
+    if (p.progress === 'solo') return { tag: '개인 행동 중', tone: 'text-glow' }
+    if (reading.includes(p.id)) return { tag: '읽는 중', tone: 'text-glow' }
+    return { tag: '고르는 중', tone: 'text-ash' }
+  }
+  if (waitingOnReady) {
+    if (p.ready) return { tag: '준비', tone: 'text-gain' }
+    if (reading.includes(p.id)) return { tag: '읽는 중', tone: 'text-glow' }
+    return { tag: '대기', tone: 'text-ash' }
+  }
+  return { tag: '', tone: 'text-ash' }
+}
+
+/** 이 인원 수 이상이면 파티 줄을 작은 카드로 줄이고 접을 수 있게 한다 */
+const COMPACT_FROM = 5
+
+/**
+ * 파티 줄: 이름·입사 배경·스텟(정신력 막대 + 나머지 숫자)·상태. 모두에게 같은 정보가 보인다.
+ * 4명까지는 큰 카드, 5명부터는 작은 카드(입사 배경 줄 없음)이고 접으면 한 줄짜리 알약(이름·상태 점·정신력)만 남는다.
+ */
 export function ScenarioParty({
   view,
   reading,
@@ -125,89 +163,84 @@ export function ScenarioParty({
   reading: string[]
   online: Record<string, boolean>
 }) {
-  const waitingOnChoice = view.phase === 'vote' || view.phase === 'split'
-  const waitingOnReady = view.phase === 'story' || view.phase === 'result'
+  const compact = view.players.length >= COMPACT_FROM
+  const [folded, setFolded] = useState(false)
+
+  const rows = view.players.map((p) => ({ p, isMe: p.id === view.me.id, ...partyTag(view, p, reading, online) }))
+
+  // 접힌 모습: 이름과 상태 점, 정신력 숫자만
+  if (compact && folded) {
+    return (
+      <div className="py-3">
+        <PartyFold count={rows.length} folded onToggle={() => setFolded(false)} />
+        <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="파티원">
+          {rows.map(({ p, isMe, tag, tone }) => (
+            <li
+              key={p.id}
+              title={`${p.name} · ${tag}`}
+              className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${
+                isMe ? 'border-glow/40 bg-glow/5' : 'border-edge bg-panel'
+              }`}
+            >
+              <span className={`h-1.5 w-1.5 shrink-0 rounded-full bg-current ${tone}`} aria-hidden />
+              <span className={p.panic ? 'text-ash line-through decoration-loss/60' : 'text-bone'}>{p.name}</span>
+              <span className="text-[10px] text-ash">{p.stats.sanity}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )
+  }
 
   return (
-    <ul className="grid grid-cols-2 gap-2 py-3 sm:grid-cols-4" aria-label="파티원">
-      {view.players.map((p) => {
-        const isMe = p.id === view.me.id
-        let tag = ''
-        let tone = 'text-ash'
-        if (online[p.id] === false) {
-          tag = '연결 끊김'
-          tone = 'text-amber'
-        } else if (p.panic) {
-          tag = '정신을 잃음'
-          tone = 'text-loss'
-        } else if (waitingOnChoice) {
-          if (p.acted) {
-            tag = '선택함'
-            tone = 'text-gain'
-          } else if (reading.includes(p.id)) {
-            tag = '읽는 중'
-            tone = 'text-glow'
-          } else {
-            tag = '고민 중'
-          }
-        } else if (view.phase === 'personal') {
-          if (p.progress === 'done') {
-            tag = '끝남'
-            tone = 'text-gain'
-          } else if (p.progress === 'picked') {
-            tag = '선택함'
-            tone = 'text-gain'
-          } else if (p.progress === 'solo') {
-            tag = '개인 행동 중'
-            tone = 'text-glow'
-          } else if (reading.includes(p.id)) {
-            tag = '읽는 중'
-            tone = 'text-glow'
-          } else {
-            tag = '고르는 중'
-          }
-        } else if (waitingOnReady) {
-          if (p.ready) {
-            tag = '준비'
-            tone = 'text-gain'
-          } else if (reading.includes(p.id)) {
-            tag = '읽는 중'
-            tone = 'text-glow'
-          } else {
-            tag = '대기'
-          }
-        }
-        const pct = (p.stats.sanity / STAT_MAX.sanity) * 100
-        return (
-          <li
-            key={p.id}
-            className={`rounded border px-2.5 py-2 ${isMe ? 'border-glow/40 bg-glow/5' : 'border-edge bg-panel'}`}
-          >
-            <div className="flex items-baseline justify-between gap-2">
-              <span className={`truncate text-[13px] sm:text-sm ${p.panic ? 'text-ash line-through decoration-loss/60' : 'text-bone'}`}>
-                {p.name}
-                {p.hurt && <span className="ml-1 text-xs text-loss no-underline" title="부상">✚</span>}
-              </span>
-              <span className={`shrink-0 text-[11px] ${tone}`}>{tag}</span>
-            </div>
-            <p className="truncate text-[11px] text-ash">{archetypeName(p.archetype)}</p>
-            <div className="mt-1.5 flex items-center gap-1.5" title="정신력">
-              <span className="w-9 shrink-0 text-[10px] text-ash">정신력</span>
-              <div className="h-1.5 flex-1 overflow-hidden rounded bg-ink">
-                <div
-                  className="h-full rounded transition-all duration-500"
-                  style={{ width: `${pct}%`, background: pct <= 30 ? '#c0524a' : '#8a93de' }}
-                />
+    <div className="py-3">
+      {compact && <PartyFold count={rows.length} folded={false} onToggle={() => setFolded(true)} />}
+      <ul className={`grid grid-cols-2 gap-2 sm:grid-cols-4 ${compact ? 'mt-2' : ''}`} aria-label="파티원">
+        {rows.map(({ p, isMe, tag, tone }) => {
+          const pct = (p.stats.sanity / STAT_MAX.sanity) * 100
+          return (
+            <li
+              key={p.id}
+              className={`rounded border ${compact ? 'px-2 py-1.5' : 'px-2.5 py-2'} ${isMe ? 'border-glow/40 bg-glow/5' : 'border-edge bg-panel'}`}
+            >
+              <div className="flex items-baseline justify-between gap-2">
+                <span className={`truncate text-[13px] sm:text-sm ${p.panic ? 'text-ash line-through decoration-loss/60' : 'text-bone'}`}>
+                  {p.name}
+                  {p.hurt && <span className="ml-1 text-xs text-loss no-underline" title="부상">✚</span>}
+                </span>
+                <span className={`shrink-0 text-[11px] ${tone}`}>{tag}</span>
               </div>
-              <span className="w-4 text-right text-[10px] text-fog">{p.stats.sanity}</span>
-            </div>
-            <p className="mt-1 text-[11px] text-ash">
-              체력 <span className="text-fog">{p.stats.body}</span> · 관찰 <span className="text-fog">{p.stats.insight}</span> · 행운{' '}
-              <span className="text-fog">{p.stats.luck}</span>
-            </p>
-          </li>
-        )
-      })}
-    </ul>
+              {!compact && <p className="truncate text-[11px] text-ash">{archetypeName(p.archetype)}</p>}
+              <div className={`${compact ? 'mt-1' : 'mt-1.5'} flex items-center gap-1.5`} title="정신력">
+                <span className="w-9 shrink-0 text-[10px] text-ash">정신력</span>
+                <div className="h-1.5 flex-1 overflow-hidden rounded bg-ink">
+                  <div
+                    className="h-full rounded transition-all duration-500"
+                    style={{ width: `${pct}%`, background: pct <= 30 ? '#c0524a' : '#8a93de' }}
+                  />
+                </div>
+                <span className="w-4 text-right text-[10px] text-fog">{p.stats.sanity}</span>
+              </div>
+              <p className="mt-1 text-[11px] text-ash">
+                체력 <span className="text-fog">{p.stats.body}</span> · 관찰 <span className="text-fog">{p.stats.insight}</span> · 행운{' '}
+                <span className="text-fog">{p.stats.luck}</span>
+              </p>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
+
+/** 파티 줄 위의 "파티 n명 · 접기/펼치기" */
+function PartyFold({ count, folded, onToggle }: { count: number; folded: boolean; onToggle: () => void }) {
+  return (
+    <div className="flex items-center justify-between text-xs text-ash">
+      <span>파티 {count}명</span>
+      <button type="button" onClick={onToggle} className="underline-offset-2 hover:text-fog hover:underline">
+        {folded ? '펼치기' : '접기'}
+      </button>
+    </div>
   )
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { type ServerMsg } from '../../net/protocol.ts'
+import { MAX_PLAYERS, type ServerMsg } from '../../net/protocol.ts'
 import { ARCHETYPES, STAT_LABEL } from '../../scenario/stats.ts'
 import { LobbyMap } from './LobbyMap.tsx'
 
@@ -30,6 +30,8 @@ export function Lobby({
   // 목록에 없는 대상이 서버에 남아 있어도 화면은 첫 대상을 기준으로 안내한다
   const mode = lobby.modes.find((m) => m.id === lobby.mode) ?? lobby.modes[0]
 
+  // 보이는 자리 수: 고른 대상의 정원 (방 전체 한도 안에서)
+  const capacity = Math.min(MAX_PLAYERS, mode.party.max)
   const tooFew = online.length < mode.party.min
   const tooMany = online.length > mode.party.max
   const blocked = tooFew
@@ -116,7 +118,7 @@ export function Lobby({
         </section>
       )}
 
-      <ul className="mt-6 space-y-2">
+      <ul className={`mt-6 grid gap-2 ${capacity > 4 ? 'sm:grid-cols-2' : ''}`}>
         {lobby.members.map((m) => (
           <li
             key={m.id}
@@ -133,7 +135,7 @@ export function Lobby({
             </span>
           </li>
         ))}
-        {Array.from({ length: Math.max(0, 4 - lobby.members.length) }, (_, i) => (
+        {Array.from({ length: Math.max(0, capacity - lobby.members.length) }, (_, i) => (
           <li key={`empty-${i}`} className="rounded border border-dashed border-edge/60 px-4 py-2.5 text-sm text-ash/60">
             빈 자리
           </li>

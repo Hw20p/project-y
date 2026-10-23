@@ -328,6 +328,15 @@ export function PersonalScene({ view, send, reading }: { view: ScenarioView; sen
                     <span className="flex-1">
                       <span className="font-serif-kr">{c.text}</span>
                       {c.locked && <span className="mt-1 block text-xs text-ash">🔒 {c.locked}</span>}
+                      {c.hints && c.hints.length > 0 && (
+                        <span className="mt-1.5 flex flex-wrap gap-1.5">
+                          {c.hints.map((h) => (
+                            <span key={h} className="rounded border border-gain/40 bg-gain/10 px-1.5 py-0.5 text-[11px] text-gain">
+                              {h}
+                            </span>
+                          ))}
+                        </span>
+                      )}
                       {c.pickerIds.length > 0 && (
                         <span className="mt-2 flex flex-wrap gap-1.5">
                           {c.pickerIds.map((id) => (

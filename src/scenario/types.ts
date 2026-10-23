@@ -287,7 +287,7 @@ export interface Scenario {
   code: string
   name: string
   type: 'creature' | 'place' | 'object'
-  /** 함께할 수 있는 인원. 정원이 필요한 분할 장면이 있으면 최소 인원이 2 이상일 수 있다. 기본 1~4명. */
+  /** 함께할 수 있는 인원. 정원이 필요한 분할 장면이 있으면 최소 인원이 2 이상일 수 있다. 기본 1~8명. */
   party?: { min: number; max: number }
   /** 대기실 지도에서의 위치(0~100, 왼쪽 위가 0,0). 점으로 찍혀 이름만 보이고, 누르면 소개가 보인다. */
   map?: { x: number; y: number }

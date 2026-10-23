@@ -11,7 +11,7 @@ export const scenarios: Scenario[] = [...playableScenarios, demo, night]
 
 /** 탐색·시험용 파티: n명, 입사 배경을 돌아가며 준다 */
 export function partyOf(n: number): PartyMember[] {
-  const names = ['가', '나', '다', '라']
+  const names = ['가', '나', '다', '라', '마', '바', '사', '아']
   return Array.from({ length: n }, (_, i) => ({
     id: `p${i + 1}`,
     name: names[i] ?? `P${i + 1}`,

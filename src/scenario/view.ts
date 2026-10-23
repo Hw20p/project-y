@@ -3,8 +3,8 @@
 import { actionState, currentNode, findStep, openVoteChoices, personalOptionState, soloChoiceState } from './game.ts'
 import { evalCond, evalText } from './logic.ts'
 import type { Change, PrivateResult, RunPhase, ScenarioGame, ScenarioResult } from './state.ts'
-import { isPanicked, type Stats } from './stats.ts'
-import type { EndingTier, HintDef, ItemDef, Scenario } from './types.ts'
+import { isPanicked, STAT_LABEL, type Stats } from './stats.ts'
+import type { Effect, EndingTier, HintDef, ItemDef, Scenario } from './types.ts'
 
 export interface DossierView {
   id: string
@@ -53,6 +53,8 @@ export interface SceneChoiceView {
   pickerIds: string[]
   /** 분할 행동의 정원이 찼는지 */
   full: boolean
+  /** 이 선택지가 주는 성장을 미리 알리는 짧은 표시 (예: "체력 +1", "정신력 +3", "부상 치료"). 개인 행동에서만 있다. */
+  hints?: string[]
 }
 
 /** 개인 장면에서 내가 지금 혼자 보고 있는 단계 */
@@ -144,6 +146,16 @@ export interface ScenarioView {
   endings: { reached: { id: string; title: string; tier: EndingTier; count: number }[]; total: number }
 }
 
+/** 스텟 상승·치료처럼 고르기 전에 알려 줘도 되는 효과만 표시로 만든다. 단서·아이템 같은 발견과 미뤄 둔 대가는 숨긴다. */
+function growthHints(effects: Effect[] | undefined): string[] {
+  const out: string[] = []
+  for (const e of effects ?? []) {
+    if ('stat' in e && e.add > 0 && e.to === 'actor') out.push(`${STAT_LABEL[e.stat]} +${e.add}`)
+    else if ('heal' in e && e.heal === 'actor') out.push('부상 치료')
+  }
+  return out
+}
+
 const BASE_SCENE = { choices: [], tie: false, myChoiceId: null, solo: null, mineDone: false, myLines: [] } satisfies Partial<SceneView>
 
 /** 변화 중 이 사람에게 보여 줄 것: 아이템·단서는 본인 것만, 나머지(스텟·부상·시간)는 모두에게 */
@@ -213,7 +225,7 @@ export function viewForScenario(sc: Scenario, g: ScenarioGame, playerId: string)
       choices: node.options.flatMap((o): SceneChoiceView[] => {
         const st = personalOptionState(g, o, playerId)
         const pickerIds = run.players.filter((p) => run.picks[p.id] === o.id).map((p) => p.id)
-        const view = { id: o.id, text: evalText(o.text, ctx), pickerIds, full: false }
+        const view = { id: o.id, text: evalText(o.text, ctx), pickerIds, full: false, hints: growthHints(o.effects) }
         if (st.open || picked === o.id) return [view]
         return st.reason ? [{ ...view, locked: st.reason }] : []
       }),

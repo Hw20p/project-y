@@ -5,7 +5,7 @@ import type { ScenarioView } from '../scenario/view.ts'
 export const MAX_NAME_LENGTH = 12
 export const ROOM_CODE_LENGTH = 4
 /** 한 방의 최대 인원 (시나리오마다 `party`로 더 좁힐 수 있다) */
-export const MAX_PLAYERS = 4
+export const MAX_PLAYERS = 8
 
 /** 시나리오 모드에서 클라이언트가 보내는 행동. 누가 보냈는지는 서버가 접속 정보로 채운다. */
 export type ScenarioClientAction =
