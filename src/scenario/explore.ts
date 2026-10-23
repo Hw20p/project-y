@@ -170,10 +170,15 @@ function macrosOf(sc: Scenario, g: ScenarioGame): Macro[] {
   }
 
   if (run.phase === 'personal' && node.kind === 'personal') {
-    const p = run.players.find((x) => !run.personal[x.id]?.done)
+    // 아직 아무도 적용되지 않은 동안에는 안 고른 첫 사람이 하나를 고른다 (모두 고르면 엔진이 한꺼번에 적용한다)
+    const undecided = run.players.find((x) => {
+      const pr = run.personal[x.id]
+      return pr && !pr.done && !pr.committed && pr.pick === null
+    })
+    const p = undecided ?? run.players.find((x) => !run.personal[x.id]?.done)
     if (!p) return []
     const prog = run.personal[p.id]
-    if (prog.step === null && prog.pick === null) {
+    if (undecided) {
       return node.options
         .filter((o) => personalOptionState(g, o, p.id).open)
         .map((o) => ({
@@ -281,7 +286,7 @@ function stateKey(g: ScenarioGame, rel: Relevance): string {
     entries(r.picks),
     Object.entries(r.personal)
       .sort(([a], [b]) => (a < b ? -1 : 1))
-      .map(([id, p]) => `${id}:${p.pick}:${p.step}:${p.done ? 1 : 0}:${JSON.stringify(p.later)}`)
+      .map(([id, p]) => `${id}:${p.pick}:${p.committed ? 1 : 0}:${p.step}:${p.done ? 1 : 0}:${JSON.stringify(p.later)}`)
       .join('|'),
     JSON.stringify(r.pending),
     sorted(r.ready),

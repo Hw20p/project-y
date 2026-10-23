@@ -1,8 +1,9 @@
 // 시나리오 정보 패널: 대상 정보 · 소지품(이번 판) · 단서 노트(지난 판까지) · 지난 기록
 import type { ScenarioView } from '../../scenario/view.ts'
 import type { JournalEntry } from '../storage.ts'
+import { BoardPanel } from './Board.tsx'
 
-export type ScenarioTab = 'entity' | 'bag' | 'notebook' | 'journal'
+export type ScenarioTab = 'board' | 'entity' | 'bag' | 'notebook' | 'journal'
 
 const TYPE_LABEL: Record<string, string> = { creature: '생명체', place: '장소', object: '물건' }
 
@@ -21,6 +22,7 @@ export function ScenarioDrawer({
 }) {
   const e = view.entity
   const tabs: { id: ScenarioTab; label: string; key: string; badge?: number }[] = [
+    ...(view.board ? [{ id: 'board' as const, label: '조사 보드', key: 'Q' }] : []),
     { id: 'entity', label: '대상 정보', key: 'I' },
     { id: 'bag', label: '소지품', key: 'B', badge: view.me.items.length + view.me.facts.length },
     { id: 'notebook', label: '단서 노트', key: 'N', badge: view.notebook.length },
@@ -53,6 +55,8 @@ export function ScenarioDrawer({
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-5">
+          {tab === 'board' && view.board && <BoardPanel board={view.board} />}
+
           {tab === 'entity' && (
             <div>
               <p className="text-xs tracking-widest text-ash">{TYPE_LABEL[e.type] ?? e.type}</p>

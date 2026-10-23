@@ -154,6 +154,9 @@ export function ScenarioParty({
           if (p.progress === 'done') {
             tag = '끝남'
             tone = 'text-gain'
+          } else if (p.progress === 'picked') {
+            tag = '선택함'
+            tone = 'text-gain'
           } else if (p.progress === 'solo') {
             tag = '개인 행동 중'
             tone = 'text-glow'

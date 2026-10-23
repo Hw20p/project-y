@@ -46,7 +46,7 @@ const startNight = (players = crew, seed = 1) =>
   console.log('통과: 입사 배경·스텟·개인 장면 검증')
 }
 
-// 2) 개인 장면: 고른 것이 각자에게 적용되고 누가 뭘 골랐는지 보인다. 기준선(행운)으로 열리는 선택지.
+// 2) 개인 장면: 모두 고를 때까지는 바꾸거나 취소할 수 있고, 모두 고르면 각자에게 적용된다. 누가 뭘 골랐는지는 보인다. 기준선(행운)으로 열리는 선택지.
 {
   let g = startNight()
   assert.equal(g.run.phase, 'personal')
@@ -60,23 +60,48 @@ const startNight = (players = crew, seed = 1) =>
   )
   assert.equal(act(g, { type: 'pick', playerId: 'b', actionId: 'lucky' }), g, '기준에 못 미치면 고를 수 없다')
 
-  // a가 훈련을 고르면 바로 적용되고, b의 화면에도 누가 골랐는지 보인다
+  // a가 훈련을 골라도 아직 아무것도 적용되지 않는다. b의 화면에는 누가 골랐는지만 보인다.
   g = act(g, { type: 'pick', playerId: 'a', actionId: 'train' })
-  assert.equal(g.run.players[0].stats.body, 2)
+  assert.equal(g.run.players[0].stats.body, 1, '모두 고르기 전에는 적용되지 않는다')
   assert.deepEqual(viewForScenario(night, g, 'b').scene!.choices.find((c) => c.id === 'train')!.pickerIds, ['a'])
-  assert.equal(viewForScenario(night, g, 'b').players[0].stats.body, 2, '스텟 변화가 파티원 줄에 보인다')
-  assert.equal(viewForScenario(night, g, 'b').players[0].progress, 'done')
-  assert.equal(act(g, { type: 'pick', playerId: 'a', actionId: 'rest' }), g, '한 번 고른 것은 바꿀 수 없다')
-  assert.equal(g.run.phase, 'personal', 'b가 아직 안 끝났다')
-  console.log('통과: 개인 장면(즉시 적용·선택 공개·스텟 기준선)')
+  assert.equal(viewForScenario(night, g, 'b').players[0].progress, 'picked')
+  assert.equal(viewForScenario(night, g, 'a').scene!.myLines.length, 0, '결과 글도 아직 없다')
+  assert.equal(g.run.phase, 'personal', 'b가 아직 안 골랐다')
+
+  // 바꾸고, 취소하고, 다시 고를 수 있다
+  g = act(g, { type: 'pick', playerId: 'a', actionId: 'rest' })
+  assert.equal(viewForScenario(night, g, 'a').scene!.myChoiceId, 'rest')
+  assert.deepEqual(viewForScenario(night, g, 'b').scene!.choices.find((c) => c.id === 'train')!.pickerIds, [])
+  assert.equal(g.run.players[0].stats.sanity, 6, '고쳐 고른 것도 아직 적용되지 않는다')
+  g = act(g, { type: 'cancel', playerId: 'a' })
+  assert.equal(viewForScenario(night, g, 'a').scene!.myChoiceId, null)
+  assert.equal(viewForScenario(night, g, 'b').players[0].progress, 'choosing')
+  assert.equal(act(g, { type: 'cancel', playerId: 'a' }), g, '거둘 것이 없으면 아무 일도 없다')
+  g = act(g, { type: 'pick', playerId: 'a', actionId: 'train' })
+
+  // 마지막 사람이 고르면 한꺼번에 적용된다
+  g = act(g, { type: 'pick', playerId: 'b', actionId: 'train' })
+  assert.equal(g.run.players[0].stats.body, 2)
+  assert.equal(g.run.players[1].stats.body, 2)
+  assert.equal(g.run.phase, 'result')
+  assert.equal(act(g, { type: 'cancel', playerId: 'a' }), g, '적용된 뒤에는 거둘 수 없다')
+
+  // 강제 진행: 안 고른 사람을 기다리지 않고, 이미 고른 것만 적용한다
+  let f = startNight()
+  f = act(f, { type: 'pick', playerId: 'a', actionId: 'train' })
+  f = act(f, { type: 'force', tieBreak: 'a' })
+  assert.equal(f.run.players[0].stats.body, 2, '고른 것은 적용된다')
+  assert.equal(f.run.players[1].stats.body, 1, '안 고른 사람은 아무것도 하지 않는다')
+  console.log('통과: 개인 장면(모두 고른 뒤 적용·선택 공개·취소·스텟 기준선)')
 }
 
 // 3) 개인 단계: 고른 뒤 혼자 이어지는 장면. 단서는 본인만 얻고 결과는 본인에게만 보인다.
 {
   let g = startNight()
   g = act(g, { type: 'pick', playerId: 'a', actionId: 'lucky' })
-  assert.ok(g.run.players[0].items.includes('lamp'))
+  assert.ok(!g.run.players[0].items.includes('lamp'), '모두 고르기 전에는 얻지 못한다')
   g = act(g, { type: 'pick', playerId: 'b', actionId: 'cellar' })
+  assert.ok(g.run.players[0].items.includes('lamp'))
   assert.equal(g.run.players[1].stats.sanity, 5)
   const vb = viewForScenario(night, g, 'b')
   assert.equal(vb.players[1].progress, 'solo')
@@ -123,6 +148,7 @@ const startNight = (players = crew, seed = 1) =>
   assert.equal(va.scene!.choices.find((c) => c.id === 'train')!.locked, '정신을 잃어 할 수 없다')
   assert.equal(act(g, { type: 'pick', playerId: 'a', actionId: 'train' }), g)
   g = act(g, { type: 'pick', playerId: 'a', actionId: 'rest' })
+  g = act(g, { type: 'pick', playerId: 'b', actionId: 'train' })
   assert.equal(g.run.players[0].stats.sanity, 4, '진정시키는 선택지로 회복한다')
   assert.equal(viewForScenario(night, g, 'a').me.panic, false)
 
@@ -131,6 +157,10 @@ const startNight = (players = crew, seed = 1) =>
   v = act(act(v, { type: 'pick', playerId: 'a', actionId: 'train' }), { type: 'pick', playerId: 'b', actionId: 'train' })
   v = readyAll(v, ['a', 'b'])
   assert.equal(v.run.nodeId, 'day')
+  // 투표도 모두 고르기 전에는 거둘 수 있다
+  const withVote = act(v, { type: 'vote', playerId: 'a', choiceId: 'wait' })
+  assert.equal(withVote.run.votes.a, 'wait')
+  assert.equal(act(withVote, { type: 'cancel', playerId: 'a' }).run.votes.a, undefined)
   v = structuredClone(v)
   v.run.players[0].stats.sanity = 0
   assert.equal(act(v, { type: 'vote', playerId: 'a', choiceId: 'wait' }), v, '정신을 잃은 사람은 투표할 수 없다')

@@ -74,6 +74,16 @@ try {
     assert.match(html, /\[개발\] 시나리오 전수 탐색기/)
     assert.match(html, /방 만들기/)
     console.log('통과: 시작 화면(개발 버튼 표시)')
+
+    // 본문 글자 연출: 문장 단위로 나뉘고, 효과 범위는 문장 안의 글자 위치로 옮겨지며, 표기는 글에서 사라진다
+    const { splitBeats } = await vite.ssrLoadModule('/src/ui/Narration.tsx')
+    const beats = splitBeats('문이 [[whisper|조용히]] 닫혔다. 불이 깜빡였다. [[shake|하나가 더 있었다.]]\n끝.')
+    assert.deepEqual(beats.map((b: { text: string }) => b.text), ['문이 조용히 닫혔다.', '불이 깜빡였다.', '하나가 더 있었다.', '끝.'])
+    assert.deepEqual(beats[0].spans, [{ fx: 'whisper', start: 3, end: 6 }])
+    assert.deepEqual(beats[2].spans, [{ fx: 'shake', start: 0, end: beats[2].text.length }])
+    assert.equal(beats[3].para, true, '줄바꿈은 문단 나눔')
+    assert.ok(beats.every((b: { text: string }) => !b.text.includes('[[')), '효과 표기는 글에 남지 않는다')
+    console.log('통과: 글자 연출 표기(문장 나눔·효과 범위)')
   }
 
   // 4) 시나리오 화면: B7 로비를 두 사람이 끝까지 진행하며, 장면 종류·개인 단계·결과·엔딩마다 화면이 에러 없이 그려지는지 본다

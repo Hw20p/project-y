@@ -270,3 +270,61 @@ body {
     transition: none;
   }
 }
+
+/* ───────── 본문 글자 연출 (`[[효과|글자]]`) ───────── */
+
+.fx-shake {
+  display: inline-block;
+  color: var(--color-loss);
+  animation: fx-shake 0.1s linear infinite alternate;
+}
+.fx-whisper {
+  color: var(--color-ash);
+  font-style: italic;
+  font-size: 0.92em;
+  letter-spacing: 0.04em;
+}
+.fx-flicker {
+  animation: fx-flicker 1.6s steps(1, end) infinite;
+}
+.fx-loud {
+  color: var(--color-bone);
+  font-weight: 700;
+  text-shadow: 0 0 10px rgb(235 229 214 / 0.35);
+}
+.fx-cold {
+  color: var(--color-glow);
+  text-shadow: 0 0 8px rgb(169 191 223 / 0.3);
+}
+/* 정신력이 낮을 때 본문이 어긋나 보인다 */
+.text-distort {
+  animation: text-distort 3.4s ease-in-out infinite;
+}
+
+@keyframes fx-shake {
+  from { transform: translate(-0.6px, 0.4px) rotate(-0.4deg); }
+  to { transform: translate(0.7px, -0.5px) rotate(0.5deg); }
+}
+@keyframes fx-flicker {
+  0% { opacity: 1; }
+  12% { opacity: 0.35; }
+  18% { opacity: 1; }
+  52% { opacity: 0.55; }
+  58% { opacity: 1; }
+  86% { opacity: 0.4; }
+  90% { opacity: 1; }
+}
+@keyframes text-distort {
+  0%, 100% { text-shadow: none; }
+  45% { text-shadow: 1.2px 0 rgb(210 101 92 / 0.4), -1.2px 0 rgb(169 191 223 / 0.4); }
+  50% { text-shadow: -1.5px 0 rgb(210 101 92 / 0.45), 1.5px 0 rgb(169 191 223 / 0.45); }
+  55% { text-shadow: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fx-shake,
+  .fx-flicker,
+  .text-distort {
+    animation: none;
+  }
+}

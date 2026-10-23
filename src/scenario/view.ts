@@ -1,7 +1,7 @@
 // 플레이어 한 명에게 보여 줄 시나리오 화면 상태. 서버는 `ScenarioGame` 전체가 아니라 이것만 각 클라이언트에 보낸다.
 // 다른 사람의 단서·비공개 발견은 여기서 걸러진다.
 import { actionState, currentNode, findStep, openVoteChoices, personalOptionState, soloChoiceState } from './game.ts'
-import { evalText } from './logic.ts'
+import { evalCond, evalText } from './logic.ts'
 import type { Change, PrivateResult, RunPhase, ScenarioGame, ScenarioResult } from './state.ts'
 import { isPanicked, type Stats } from './stats.ts'
 import type { EndingTier, HintDef, ItemDef, Scenario } from './types.ts'
@@ -13,6 +13,23 @@ export interface DossierView {
   lines: string[] | null
   /** 잠겨 있을 때 어떻게 열리는지 알려 주는 짧은 안내 */
   lockNote?: string
+}
+
+/** 조사 보드의 의문 하나 (내 화면 기준) */
+export interface BoardQuestionView {
+  id: string
+  /** 아직 아무도 관련 단서를 모르면 null (의문이 있다는 것도 모른다) */
+  text: string | null
+  solved: boolean
+  /** 풀렸을 때만 */
+  answer: string | null
+  /** 내가 아는 관련 단서. `old`는 지난 판에서 알아낸 것(단서 노트)이다. */
+  clues: { id: string; text: string; old: boolean }[]
+}
+
+export interface BoardView {
+  goal: string
+  questions: BoardQuestionView[]
 }
 
 /** 정보 패널의 대상 정보 */
@@ -76,7 +93,7 @@ export interface PlayerView {
   /** 파티원의 스텟은 모두에게 보인다 — 누가 무엇을 해야 할지 의논하는 근거 */
   stats: Stats
   /** 개인 장면에서의 진행: 고르는 중 / 혼자 진행 중 / 끝남 */
-  progress: 'choosing' | 'solo' | 'done' | null
+  progress: 'choosing' | 'picked' | 'solo' | 'done' | null
   /** 이번 장면에서 고름을 마쳤는지 (무엇을 골랐는지는 선택지의 `pickerIds`로 보인다) */
   acted: boolean
   /** story·result에서 "계속"을 눌렀는지 */
@@ -108,10 +125,14 @@ export interface ScenarioView {
   phase: RunPhase
   me: { id: string; name: string; hurt: boolean; panic: boolean; stats: Stats; items: ItemDef[]; facts: HintDef[] }
   players: PlayerView[]
+  /** 며칠째 낮/밤인지 (시나리오가 장면에 시간대를 정해 둔 경우에만) */
+  timeOfDay: { day: number; period: 'day' | 'night' } | null
   /** 정보 패널(대상 정보)용. 대상 자료는 내 단서 노트에 따라 열린다. */
   entity: EntityView
   /** 단서 노트: 지금까지 알아낸 사실 (지난 판 것까지) */
   notebook: HintDef[]
+  /** 조사 보드 (시나리오에 있을 때만) */
+  board: BoardView | null
   /** 아이템 id → 이름 (변화 칩에 "○○ 획득"을 쓰기 위함) */
   itemNames: Record<string, string>
   /** 이 장면에 들어오며 적용된 변화: 지난 선택의 **여파**(`later`)와 이 장면의 진입 효과. 아이템·단서는 본인 것만 보인다. */
@@ -246,11 +267,55 @@ export function viewForScenario(sc: Scenario, g: ScenarioGame, playerId: string)
 
   // ───── 단서 노트와 대상 자료
   const book = g.notebooks[playerId] ?? []
-  const notebook = book.map((id) => sc.facts.find((f) => f.id === id)).filter((f): f is HintDef => !!f)
+  // 판마다 바뀌는 값에 대한 사실(`run`)은 판이 바뀌면 뜻이 없어지므로 단서 노트에서 뺀다
+  const notebook = book
+    .map((id) => sc.facts.find((f) => f.id === id))
+    .filter((f): f is HintDef => !!f && !f.run)
+
+  // ───── 조사 보드
+  const board: BoardView | null = sc.board
+    ? {
+        goal: sc.board.goal,
+        questions: sc.board.questions.map((q): BoardQuestionView => {
+          const mine = me.facts.filter((id) => q.facts.includes(id))
+          const old = book.filter((id) => q.facts.includes(id) && !mine.includes(id) && !sc.facts.find((f) => f.id === id)?.run)
+          const solved = evalCond(q.solved, ctx)
+          const partyKnows = run.players.some((p) => p.facts.some((id) => q.facts.includes(id)))
+          const revealed = solved || partyKnows || old.length > 0
+          const clueOf = (id: string, isOld: boolean) => {
+            const f = sc.facts.find((x) => x.id === id)
+            return f ? { id, text: f.text, old: isOld } : null
+          }
+          return {
+            id: q.id,
+            text: revealed ? q.text : null,
+            solved,
+            answer: solved ? evalText(q.answer, ctx) : null,
+            clues: [...mine.map((id) => clueOf(id, false)), ...old.map((id) => clueOf(id, true))].filter(
+              (c): c is { id: string; text: string; old: boolean } => !!c,
+            ),
+          }
+        }),
+      }
+    : null
   const dossier: DossierView[] = (sc.dossier ?? []).map((d) => {
     if (!d.unlock?.hint || book.includes(d.unlock.hint)) return { id: d.id, title: d.title, lines: d.lines }
     return { id: d.id, title: d.title, lines: null, lockNote: '관련된 단서를 찾으면 읽을 수 있다' }
   })
+
+  // ───── 며칠째 낮/밤: 지나온 장면의 시간대를 따라가며, 밤에서 낮으로 넘어갈 때 하루가 지난다
+  let timeOfDay: ScenarioView['timeOfDay'] = null
+  if (sc.nodes.some((n) => n.period)) {
+    let day = 1
+    let period: 'day' | 'night' = 'day'
+    for (const id of run.visited) {
+      const p = sc.nodes.find((n) => n.id === id)?.period
+      if (!p) continue
+      if (period === 'night' && p === 'day') day++
+      period = p
+    }
+    timeOfDay = { day, period }
+  }
 
   const endingNodes = sc.nodes.filter((n) => n.kind === 'ending')
   const clock = sc.clock.labels
@@ -260,6 +325,7 @@ export function viewForScenario(sc: Scenario, g: ScenarioGame, playerId: string)
     runNo: g.runNo,
     time: run.time,
     clockLabel: clock[Math.min(run.time, clock.length - 1)] ?? '',
+    timeOfDay,
     phase: run.phase,
     me: {
       id: me.id,
@@ -281,9 +347,11 @@ export function viewForScenario(sc: Scenario, g: ScenarioGame, playerId: string)
         run.phase === 'personal'
           ? run.personal[p.id]?.done
             ? 'done'
-            : run.personal[p.id]?.pick
+            : run.personal[p.id]?.committed
               ? 'solo'
-              : 'choosing'
+              : run.personal[p.id]?.pick
+                ? 'picked'
+                : 'choosing'
           : null,
       acted:
         run.phase === 'vote'
@@ -305,6 +373,7 @@ export function viewForScenario(sc: Scenario, g: ScenarioGame, playerId: string)
       dossier,
     },
     notebook,
+    board,
     itemNames: Object.fromEntries(sc.items.map((i) => [i.id, i.name])),
     aftermath: visibleTo(run.aftermath, playerId),
     scene,
