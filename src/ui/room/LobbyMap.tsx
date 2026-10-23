@@ -23,15 +23,6 @@ const UNEXPLORED = [
 /** 지도에 자리만 잡아 둔 임시 대상: 소개는 볼 수 있지만 정할 수는 없다. 서버에는 없고 화면에서만 그린다. */
 const DUMMIES: LobbyModeInfo[] = [
   {
-    id: 'dummy-1',
-    code: 'A-03',
-    name: '임시 대상 1',
-    blurb: '아직 만들어지지 않은 자리표시이다. 나중에 실제 대상으로 바뀐다.',
-    party: { min: 1, max: 8 },
-    map: { x: 82, y: 30 },
-    type: 'place',
-  },
-  {
     id: 'dummy-2',
     code: 'A-04',
     name: '임시 대상 2',

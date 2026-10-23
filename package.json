@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "validate": "node --experimental-strip-types --no-warnings scripts/validate.ts",
-    "scenario": "node --experimental-strip-types --no-warnings scripts/smoke.ts && node --experimental-strip-types --no-warnings scripts/night.ts && node --experimental-strip-types --no-warnings scripts/explore-test.ts && node --experimental-strip-types --no-warnings scripts/b7-walkthrough.ts",
+    "scenario": "node --experimental-strip-types --no-warnings scripts/smoke.ts && node --experimental-strip-types --no-warnings scripts/night.ts && node --experimental-strip-types --no-warnings scripts/explore-test.ts && node --experimental-strip-types --no-warnings scripts/b7-walkthrough.ts && node --experimental-strip-types --no-warnings scripts/vending-walkthrough.ts",
     "build:server": "esbuild server/main.ts --bundle --platform=node --target=node20 --format=esm --external:bufferutil --external:utf-8-validate --banner:js=\"import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);\" --outfile=dist-server/main.mjs",
     "server": "node --experimental-strip-types --no-warnings server/main.ts",
     "nettest": "node --experimental-strip-types --no-warnings scripts/nettest.ts",
