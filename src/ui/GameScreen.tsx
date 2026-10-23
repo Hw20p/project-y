@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { CONFIG } from '../engine/config.ts'
 import type { GameView } from '../engine/view.ts'
 import { Briefing } from './Briefing.tsx'
-import { ReadingContext } from './client.ts'
+import { ReadingContext, type GameClient } from './client.ts'
 import { EndingScreen } from './Ending.tsx'
 import { FxSettingsBar, playSfx } from './fx.tsx'
 import { BEAT_LABEL } from './format.ts'
@@ -12,7 +12,6 @@ import { Party } from './Party.tsx'
 import { ResultPanel, type Impact } from './Result.tsx'
 import { Scene } from './Scene.tsx'
 import { StatusBar } from './StatusBar.tsx'
-import { useLocalGame } from './useLocalGame.ts'
 
 function toJournal(view: GameView): JournalEntry | null {
   const r = view.result
@@ -41,6 +40,21 @@ function toJournal(view: GameView): JournalEntry | null {
   return null
 }
 
+/** 방장이 "기다리지 않고 진행"을 쓸 만한 상황인지: 아직 할 일을 안 마친 파티원이 있다 */
+function waitingOnOthers(view: GameView): boolean {
+  if (view.players.length < 2) return false
+  switch (view.phase) {
+    case 'briefing':
+    case 'result':
+      return view.players.some((p) => p.id !== view.me.id && !p.ready)
+    case 'vote':
+    case 'night':
+      return view.players.some((p) => p.id !== view.me.id && p.alive && !p.acted)
+    default:
+      return false
+  }
+}
+
 const SOUND_OF: Record<Impact, Parameters<typeof playSfx>[0]> = {
   death: 'death',
   fragment: 'fragment',
@@ -50,13 +64,18 @@ const SOUND_OF: Record<Impact, Parameters<typeof playSfx>[0]> = {
 }
 
 export function GameScreen({
-  config,
+  client,
   onExit,
+  exitLabel,
+  onLeave,
 }: {
-  config: { bots: number; resume: boolean }
+  client: GameClient
   onExit: () => void
+  exitLabel: string
+  /** 온라인 방에서 자리를 완전히 비우고 나가기 (없으면 버튼을 보이지 않는다) */
+  onLeave?: () => void
 }) {
-  const { view, send, reading, setReading } = useLocalGame(config)
+  const { view, send, reading, setReading, online, roomCode, isHost, reconnecting, force } = client
   const [journal, setJournal] = useState<JournalEntry[]>([])
   const seen = useRef(new Set<string>())
 
@@ -137,8 +156,32 @@ export function GameScreen({
           <FxSettingsBar />
         </div>
 
+        {reconnecting && (
+          <p className="mb-3 rounded border border-amber/40 bg-amber/10 px-3 py-2 text-sm text-amber">
+            연결이 끊겼다. 다시 붙는 중…
+          </p>
+        )}
+        {roomCode && view.phase !== 'ended' && (
+          <p className="mb-2 text-xs text-ash">
+            방 코드 <span className="tracking-widest text-fog">{roomCode}</span>
+          </p>
+        )}
+
         {view.phase !== 'ended' && <StatusBar view={view} />}
-        {view.phase !== 'ended' && <Party view={view} reading={reading} />}
+        {view.phase !== 'ended' && <Party view={view} reading={reading} online={online} />}
+        {isHost && force && waitingOnOthers(view) && (
+          <div className="-mt-1 mb-2 text-right">
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm('아직 안 고른 사람을 기다리지 않고 진행할까요?')) force()
+              }}
+              className="text-xs text-ash underline-offset-2 hover:text-fog hover:underline"
+            >
+              기다리지 않고 진행 (방장)
+            </button>
+          </div>
+        )}
 
         <main className="mt-2">
           {view.phase === 'briefing' && <Briefing key={sceneKey} view={view} send={send} />}
@@ -157,14 +200,23 @@ export function GameScreen({
         </main>
 
         {view.phase !== 'ended' && (
-          <div className="mt-10">
+          <div className="mt-10 flex flex-col items-start gap-2">
             <button
               type="button"
               onClick={onExit}
               className="text-xs text-ash underline-offset-2 hover:text-fog hover:underline"
             >
-              처음 화면으로 (진행 상황은 저장되어 있다)
+              {exitLabel}
             </button>
+            {onLeave && (
+              <button
+                type="button"
+                onClick={onLeave}
+                className="text-xs text-ash/70 underline-offset-2 hover:text-loss hover:underline"
+              >
+                방 완전히 나가기
+              </button>
+            )}
           </div>
         )}
       </div>
