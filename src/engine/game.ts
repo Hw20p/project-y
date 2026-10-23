@@ -358,6 +358,7 @@ function resolveVote(ctx: GameContext, s: GameState, rng: Rng): void {
 
   let choice: Choice
   let actor: Player
+  let tie = false
   if (voterIds.length === 0) {
     choice = rng.pick(choices)
     actor = rng.pick(alive)
@@ -366,7 +367,8 @@ function resolveVote(ctx: GameContext, s: GameState, rng: Rng): void {
     for (const id of voterIds) counts.set(votes[id], (counts.get(votes[id]) ?? 0) + 1)
     const top = Math.max(...counts.values())
     const tied = choices.filter((c) => counts.get(c.id) === top)
-    choice = tied.length > 1 ? rng.pick(tied) : tied[0]
+    tie = tied.length > 1
+    choice = tie ? rng.pick(tied) : tied[0]
     const winners = voterIds.filter((id) => votes[id] === choice.id)
     actor = playerOf(s, rng.pick(winners))!
   }
@@ -387,6 +389,8 @@ function resolveVote(ctx: GameContext, s: GameState, rng: Rng): void {
     story: choice.story,
     actorId: actor.id,
     votes,
+    options: choices.map((c) => ({ id: c.id, text: c.text })),
+    tie,
     ...fx,
   }
   s.lastResult = result
@@ -407,6 +411,7 @@ function resolveNight(ctx: GameContext, s: GameState, rng: Rng): void {
       entries.push({
         playerId: p.id,
         choiceId: null,
+        choiceText: '',
         success: false,
         text: '아무것도 하지 않고 밤을 보냈다.',
         threat: 0,
@@ -419,7 +424,14 @@ function resolveNight(ctx: GameContext, s: GameState, rng: Rng): void {
     const success = rng.next() < chanceOf(choice, [p])
     const outcome = success ? choice.success : choice.failure
     const fx = applyOutcome(ctx, s, p, outcome, !success && !!choice.failure.casualty)
-    entries.push({ playerId: p.id, choiceId: choice.id, success, text: outcome.text, ...fx })
+    entries.push({
+      playerId: p.id,
+      choiceId: choice.id,
+      choiceText: choice.text,
+      success,
+      text: outcome.text,
+      ...fx,
+    })
   }
 
   s.lastResult = { kind: 'night', entries }
