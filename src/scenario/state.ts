@@ -21,7 +21,7 @@ export interface RunPlayer {
  * - story : 장면을 읽는 중 (전원이 "계속"을 누르면 다음으로)
  * - vote  : 다 같이 고르는 중
  * - split : 각자 행동을 고르는 중 (조합이 결과를 정함)
- * - personal: 각자 자기 몫을 고르고 혼자 진행하는 중 (고른 것이 각자에게 적용됨)
+ * - personal: 각자 자기 몫을 고르고(모두 고를 때까지 바꾸거나 취소할 수 있다) 모두 고르면 적용되어 혼자 진행하는 중
  * - result: 선택·행동의 결과를 보는 중 (전원이 "계속"을 누르면 다음으로)
  * - ended : 이번 판이 엔딩에 닿았다 (`retry`로 새 판)
  */
@@ -43,8 +43,10 @@ export interface PrivateResult {
 
 /** 개인 장면에서 한 사람의 진행 */
 export interface PersonalProgress {
-  /** 처음에 고른 선택지 */
+  /** 처음에 고른 선택지. 모두 고르기 전(`committed`가 거짓)에는 바꾸거나 취소할 수 있다. */
   pick: string | null
+  /** 모두가 골라서 고른 것이 적용되었는지. 그 전에는 효과도 글도 아무것도 일어나지 않는다. */
+  committed: boolean
   /** 지금 이 사람이 보고 있는 개인 단계 (선택 전이거나 끝났으면 null) */
   step: string | null
   /** 끝났는지 (이어지는 단계를 다 마쳤거나, 정신을 잃어 더 못 한다) */

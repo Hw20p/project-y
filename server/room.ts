@@ -303,7 +303,11 @@ export class Room {
           break
         }
         case 'personal':
-          stuck = here.every((p) => run.personal[p.id]?.done)
+          // 고르는 중이면 접속 중인 사람이 다 골랐을 때, 적용된 뒤에는 다 끝났을 때
+          stuck = here.every((p) => {
+            const prog = run.personal[p.id]
+            return prog?.done || (!prog?.committed && prog?.pick)
+          })
           break
       }
       if (!stuck) return

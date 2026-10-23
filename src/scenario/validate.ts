@@ -2,6 +2,7 @@
 // (모든 길을 실제로 돌려 보는 전수 탐색은 다음 단계에서 `explore`로 추가한다.)
 import { STAT_KEYS, STAT_MAX, type Archetype } from './stats.ts'
 import type { Cond, Effect, PersonalNode, Route, Scenario, Target, Text } from './types.ts'
+import { FX_NAMES, fxNamesIn, stripFx } from './fx.ts'
 
 export interface ValidationReport {
   errors: string[]
@@ -102,7 +103,8 @@ export function validateScenario(sc: Scenario): ValidationReport {
     if (parts.length === 0) at(where, '글이 비어 있음')
     for (const part of parts) {
       const s = typeof part === 'string' ? part : part.text
-      if (!s.trim()) at(where, '빈 문장')
+      if (!stripFx(s).trim()) at(where, '빈 문장')
+      for (const name of fxNamesIn(s)) if (!(FX_NAMES as readonly string[]).includes(name)) at(where, `알 수 없는 글자 효과 "${name}"`)
       if (typeof part !== 'string' && part.when) cond(part.when, scope, where, actions)
       for (const m of s.matchAll(/\{([^{}\s]+)\}/g)) {
         if (m[1] !== 'players' && !varSpecs.has(m[1])) at(where, `글 안의 {${m[1]}}에 맞는 무작위 값이 없음`)
@@ -325,6 +327,16 @@ export function validateScenario(sc: Scenario): ValidationReport {
   if (sc.onAllHurt) {
     if (!isEnding(sc.onAllHurt)) at('전원 부상', `"${sc.onAllHurt}"는 엔딩 장면이어야 함`)
     special.push(sc.onAllHurt)
+  }
+
+  // 조사 보드: 관련 사실·풀림 조건·답 글
+  unique('의문', (sc.board?.questions ?? []).map((q) => q.id))
+  for (const q of sc.board?.questions ?? []) {
+    const where = `의문 ${q.id}`
+    if (q.facts.length === 0) at(where, '관련 사실이 없으면 보드에 단서가 붙지 않음')
+    for (const f of q.facts) if (!factIds.has(f)) at(where, `알 수 없는 사실 "${f}"`)
+    cond(q.solved, PARTY, where)
+    text(q.answer, PARTY, where)
   }
 
   for (const d of sc.dossier ?? []) {

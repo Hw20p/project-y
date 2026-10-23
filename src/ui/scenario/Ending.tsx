@@ -1,6 +1,7 @@
 import type { EndingTier } from '../../scenario/types.ts'
 import type { ScenarioClient } from '../client.ts'
-import { Appear, Typed, useAdvanceKey, useSequence, useSteps } from '../Narration.tsx'
+import { useMemo } from 'react'
+import { Appear, Beats, beatSteps, splitBeats, useAdvanceKey, useSequence, useSteps } from '../Narration.tsx'
 
 const TIER_LABEL: Record<EndingTier, string> = { true: '진엔딩', good: '좋은 엔딩', neutral: '보통 엔딩', bad: '나쁜 엔딩' }
 const TIER_CLASS: Record<EndingTier, string> = {
@@ -23,12 +24,9 @@ export function ScenarioEnding({
   const { view } = client
   const ending = view.ending!
 
+  const beats = useMemo(() => splitBeats(ending.text), [ending.text])
   const { steps, at } = useSteps(
-    [
-      ['title', 0, 1600],
-      ['body', ending.text.length, 900],
-      ['record', 0, 800],
-    ],
+    [['title', 0, 1600], ...beatSteps(beats), ['record', 0, 800]],
     [ending.id],
   )
   const seq = useSequence(steps)
@@ -47,9 +45,7 @@ export function ScenarioEnding({
         <h2 className="title-card mt-2 font-serif-kr text-3xl font-bold sm:text-4xl">{ending.title}</h2>
       </Appear>
 
-      <p className="mx-auto mt-8 max-w-xl text-left font-serif-kr leading-9 text-fog">
-        <Typed text={ending.text} step={at.body} seq={seq} />
-      </p>
+      <Beats beats={beats} at={at} seq={seq} className="mx-auto mt-8 max-w-xl text-left font-serif-kr leading-9 text-fog" />
 
       <Appear step={at.record} seq={seq} className="mx-auto mt-8 max-w-xl text-left">
         <p className="text-xs text-ash">

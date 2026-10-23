@@ -27,6 +27,8 @@ export type ScenarioAction =
   | { type: 'pick'; playerId: string; actionId: string }
   /** 개인 장면에서 이어지는 개인 단계의 선택지 */
   | { type: 'solo'; playerId: string; choiceId: string }
+  /** 모두가 고르기 전에 내 선택(투표·행동·개인 선택)을 거둔다 */
+  | { type: 'cancel'; playerId: string }
   /**
    * 기다리지 않고 지금 있는 것만으로 진행한다 (방장·타이머용). 동률인 투표는 `tieBreak`(보통 방장)가 고른 쪽으로 정한다.
    * 읽기·결과 단계에서는 그냥 다음으로 넘어가고, 개인 장면에서는 아직 안 끝난 사람의 진행을 거기서 끝낸다.
@@ -220,14 +222,30 @@ export function reduceScenario(sc: Scenario, state: ScenarioGame, action: Scenar
       if (run.phase === 'personal' && node.kind === 'personal') {
         const prog = run.personal[player.id]
         const option = node.options.find((o) => o.id === action.actionId)
-        if (!prog || prog.pick !== null || prog.done || !option || !personalOptionState(g, option, player.id).open) return state
+        if (!prog || prog.committed || prog.done || !option || !personalOptionState(g, option, player.id).open) return state
+        // 모두가 고를 때까지는 고르기만 한다 (바꾸거나 취소할 수 있고, 효과도 글도 아직 없다)
         prog.pick = option.id
         run.picks[player.id] = option.id
-        prog.changes.push(...applyEffects(g, option.effects, { actor: player.id }))
-        prog.later.push(...(option.later ?? []))
-        if (option.result) prog.lines.push(evalText(option.result, { run, actor: player.id, viewer: player.id }))
-        enterStep(g, node, player, option.then)
-        settlePersonal(sc, g, node)
+        if (run.players.every((p) => run.personal[p.id]?.done || run.personal[p.id]?.pick)) commitPersonal(sc, g, node, true)
+        return g
+      }
+      return state
+    }
+    case 'cancel': {
+      const node = currentNode(sc, g)
+      if (!player) return state
+      if (run.phase === 'vote' && run.votes[player.id]) {
+        delete run.votes[player.id]
+        return g
+      }
+      if (run.phase === 'split' && run.picks[player.id]) {
+        delete run.picks[player.id]
+        return g
+      }
+      const prog = run.personal[player.id]
+      if (run.phase === 'personal' && node.kind === 'personal' && prog && !prog.committed && !prog.done && prog.pick !== null) {
+        prog.pick = null
+        delete run.picks[player.id]
         return g
       }
       return state
@@ -258,6 +276,7 @@ export function reduceScenario(sc: Scenario, state: ScenarioGame, action: Scenar
         return g
       }
       if (run.phase === 'personal' && node.kind === 'personal') {
+        commitPersonal(sc, g, node, false) // 아직 안 적용된 선택은 지금 적용하고, 이어지는 개인 단계는 거기서 끝낸다
         for (const prog of Object.values(run.personal)) prog.done = true
         settlePersonal(sc, g, node)
         return g
@@ -475,12 +494,36 @@ function resolveSplit(sc: Scenario, g: ScenarioGame, node: SplitNode): void {
 function startPersonal(sc: Scenario, g: ScenarioGame, node: PersonalNode): void {
   const run = g.run
   for (const p of run.players) {
-    const prog: PersonalProgress = { pick: null, step: null, done: false, lines: [], changes: [], later: [], stepChanges: [] }
+    const prog: PersonalProgress = { pick: null, committed: false, step: null, done: false, lines: [], changes: [], later: [], stepChanges: [] }
     run.personal[p.id] = prog
     if (!node.options.some((o) => optionOpenFor(g, o, p).open)) {
       prog.done = true
+      prog.committed = true
       prog.lines.push(isPanicked(p) ? '정신을 잃어 아무것도 하지 못했다.' : '할 수 있는 일이 없었다.')
     }
+  }
+  settlePersonal(sc, g, node)
+}
+
+/**
+ * 모두가 골랐으니 각자의 선택을 적용한다 (사람 순서대로). `enter`가 거짓이면(강제 진행) 이어지는 개인 단계에는 들어가지 않고
+ * 그 사람의 행동을 거기서 끝낸다. 고르지 않은 사람은 아무것도 하지 않은 채 끝난다.
+ */
+function commitPersonal(sc: Scenario, g: ScenarioGame, node: PersonalNode, enter: boolean): void {
+  const run = g.run
+  for (const player of run.players) {
+    const prog = run.personal[player.id]
+    if (!prog || prog.committed || prog.done) continue
+    prog.committed = true
+    const option = node.options.find((o) => o.id === prog.pick)
+    if (!option) {
+      prog.done = true
+      continue
+    }
+    prog.changes.push(...applyEffects(g, option.effects, { actor: player.id }))
+    prog.later.push(...(option.later ?? []))
+    if (option.result) prog.lines.push(evalText(option.result, { run, actor: player.id, viewer: player.id }))
+    enterStep(g, node, player, enter ? option.then : undefined)
   }
   settlePersonal(sc, g, node)
 }

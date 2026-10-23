@@ -1,7 +1,7 @@
 // 시나리오 결과 화면: 투표·조합·개인 행동의 결과를 단계별로 보여 준다.
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import type { ScenarioClient } from '../client.ts'
-import { Appear, Typed, useAdvanceKey, useSequence, useSteps } from '../Narration.tsx'
+import { Appear, Beats, beatSteps, splitBeats, useAdvanceKey, useSequence, useSteps } from '../Narration.tsx'
 import type { Change } from '../../scenario/state.ts'
 import type { ResultView, ScenarioView } from '../../scenario/view.ts'
 import { Changes, Continue, NewFacts, SkipHint } from './parts.tsx'
@@ -61,18 +61,23 @@ export function ScenarioResultPanel({
   onImpact: (i: Impact) => void
 }) {
   const result = view.result!
-  const mineLines = (result.mine?.text ?? '').split('\n').filter(Boolean)
   const allChanges = [...result.changes, ...(result.mine?.changes ?? [])]
 
+  // 고른 직후에는 해설이 먼저 흐르고(내가 본 것 → 모두에게 일어난 일), 잠시 숨을 고른 뒤에 결과(변화·새 단서)가 나온다
+  const mineText = result.mine?.text ?? ''
+  const mineBeats = useMemo(() => splitBeats(mineText), [mineText])
+  const textBeats = useMemo(() => splitBeats(result.text), [result.text])
+  const hasNarration = mineBeats.length + textBeats.length > 0
   const { steps, at } = useSteps(
     [
       ['head', 0, 650],
       ['who', 0, 700],
-      ['mine', result.mine?.text.length ?? 0, 500],
-      ['text', result.text.length, 500],
+      ...beatSteps(mineBeats, [], 'm'),
+      ...beatSteps(textBeats, [], 't'),
+      ['hold', 0, hasNarration ? 800 : 0],
       ['chips', 0, 500],
     ],
-    [],
+    [mineText, result.text],
   )
   const seq = useSequence(steps)
   useAdvanceKey(seq, () => send({ type: 'ready' }))
@@ -130,36 +135,21 @@ export function ScenarioResultPanel({
         {result.kind !== 'vote' && result.picks && <PickList view={view} picks={result.picks} options={result.options} />}
       </Appear>
 
-      {mineLines.length > 0 && (
-        <div className="mt-5 rounded border border-glow/30 bg-glow/5 p-4">
+      {mineBeats.length > 0 && (
+        <div className={`mt-5 rounded border border-glow/30 bg-glow/5 p-4 ${seq.i < at.m0 ? 'invisible' : ''}`}>
           <p className="text-xs tracking-widest text-glow">내가 본 것 · 나만 안다</p>
-          <div className="mt-2 space-y-1.5 font-serif-kr leading-8">
-            {mineLines.length === 1 ? (
-              <p>
-                <Typed text={mineLines[0]} step={at.mine} seq={seq} />
-              </p>
-            ) : (
-              mineLines.map((l, i) => (
-                <p key={i} className={seq.i < at.mine ? 'invisible' : 'text-fog'}>
-                  {l}
-                </p>
-              ))
-            )}
-          </div>
+          <Beats beats={mineBeats} at={at} seq={seq} prefix="m" className="mt-2 font-serif-kr leading-8" />
         </div>
       )}
 
-      {result.text && (
-        <p
-          className={`mt-4 border-l-2 border-edge pl-3 font-serif-kr leading-8 ${
-            seq.i < at.text ? 'invisible' : 'text-bone'
-          }`}
-        >
-          <Typed text={result.text} step={at.text} seq={seq} />
-        </p>
+      {textBeats.length > 0 && (
+        <div className={`mt-4 border-l-2 border-edge pl-3 text-bone ${seq.i < at.t0 ? 'invisible' : ''}`}>
+          <Beats beats={textBeats} at={at} seq={seq} prefix="t" className="font-serif-kr leading-8" />
+        </div>
       )}
 
       <Appear step={at.chips} seq={seq}>
+        {allChanges.length > 0 && <p className="mt-5 text-xs tracking-widest text-ash">결과</p>}
         <Changes changes={allChanges} view={view} />
         <NewFacts changes={allChanges} view={view} />
       </Appear>

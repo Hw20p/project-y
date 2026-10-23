@@ -15,6 +15,8 @@ export type ScenarioClientAction =
   | { type: 'pick'; actionId: string }
   /** 개인 장면에서 이어지는 개인 단계의 선택지 */
   | { type: 'solo'; choiceId: string }
+  /** 모두가 고르기 전에 내 선택을 거둔다 */
+  | { type: 'cancel' }
 
 export type ClientMsg =
   | { t: 'create'; name: string }
@@ -121,6 +123,7 @@ export function parseClientMsg(raw: string): ClientMsg | null {
       const a = m.action as Record<string, unknown> | null
       if (typeof a !== 'object' || a === null) return null
       if (a.type === 'ready') return { t: 'saction', action: { type: 'ready' } }
+      if (a.type === 'cancel') return { t: 'saction', action: { type: 'cancel' } }
       if ((a.type === 'vote' || a.type === 'solo') && isString(a.choiceId, 64)) {
         return { t: 'saction', action: { type: a.type, choiceId: a.choiceId } }
       }

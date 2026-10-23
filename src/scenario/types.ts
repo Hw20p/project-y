@@ -13,6 +13,26 @@ export interface ItemDef {
 export interface HintDef {
   id: string
   text: string
+  /** 이번 판에서만 뜻이 있는 사실 (판마다 바뀌는 값을 가리킨다). 조사 보드에는 붙지만 단서 노트에는 보이지 않는다. */
+  run?: boolean
+}
+
+/** 조사 보드의 의문 하나: 풀어야 할 질문과, 그에 관련된 단서들 */
+export interface QuestionDef {
+  id: string
+  text: string
+  /** 이 의문과 관련된 사실들. 파티 중 누구라도 하나를 알면 의문이 보이고, 내가 아는 단서가 아래에 붙는다. */
+  facts: string[]
+  /** 풀렸는지 (보통 추리 장면에서 켜는 깃발) */
+  solved: Cond
+  /** 풀렸을 때 보드에 적히는 답 */
+  answer: Text
+}
+
+/** 조사 보드: 지금 무엇을 해야 하고 무엇이 풀렸는지를 한눈에 보인다 */
+export interface BoardDef {
+  goal: string
+  questions: QuestionDef[]
 }
 
 /**
@@ -89,6 +109,11 @@ interface NodeBase {
   id: string
   /** 장면 제목 (화면 위쪽에 보인다) */
   title?: string
+  /**
+   * 이 장면이 낮인지 밤인지. 비워 두면 앞 장면의 시간대를 이어받는다 (처음은 낮).
+   * 밤에서 낮으로 넘어갈 때마다 하루가 지난다 — 화면에는 "1일째 낮"처럼 보인다.
+   */
+  period?: 'day' | 'night'
   /** 이 장면에 들어올 때 적용되는 효과 */
   onEnter?: Effect[]
 }
@@ -277,6 +302,8 @@ export interface Scenario {
   items: ItemDef[]
   /** 알아낼 수 있는 사실들. 한 번 알아내면 단서 노트에 남는다. */
   facts: HintDef[]
+  /** 조사 보드: 목표와 풀어야 할 의문들 */
+  board?: BoardDef
   vars?: VarSpec[]
   /** 시계의 이름들. 시계 값이 인덱스이고, 끝을 넘으면 마지막 이름을 쓴다. */
   clock: { labels: string[] }

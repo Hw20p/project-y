@@ -1,9 +1,12 @@
 // 시나리오 모드의 게임 화면: 상단(시계·판 번호·엔딩 진행)·파티(스텟)·장면·정보 패널.
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { stripFx } from '../../scenario/fx.ts'
 import type { ScenarioView } from '../../scenario/view.ts'
 import { ReadingContext, type ScenarioClient } from '../client.ts'
 import { FxSettingsBar, playSfx } from '../fx.tsx'
+import { DistortContext } from '../Narration.tsx'
 import { loadJournal, pruneJournals, saveJournal, type JournalEntry } from '../storage.ts'
+import { BoardStrip } from './Board.tsx'
 import { ScenarioDrawer, type ScenarioTab } from './Drawer.tsx'
 import { ScenarioEnding } from './Ending.tsx'
 import { ScenarioParty } from './parts.tsx'
@@ -18,7 +21,7 @@ function toJournal(view: ScenarioView): JournalEntry | null {
   if (!r) return null
   const label =
     r.kind === 'vote' ? `추리 · ${r.choiceText ?? ''}` : r.kind === 'split' ? '조합' : '개인 행동'
-  const parts = [r.text, r.mine?.text.replace(/\n/g, ' ')].filter(Boolean)
+  const parts = [stripFx(r.text), stripFx(r.mine?.text ?? '').replace(/\n/g, ' ')].filter(Boolean)
   if (parts.length === 0) return null
   return {
     key: `${view.runNo}:${r.nodeId}:${view.time}`,
@@ -82,6 +85,7 @@ export function ScenarioScreen({
       const toggle = (t: ScenarioTab) => setDrawer((d) => (d === t ? null : t))
       if (e.key === 'Escape') setDrawer(null)
       else if (view.phase === 'ended') return
+      else if ((e.key === 'q' || e.key === 'Q') && view.board) toggle('board')
       else if (e.key === 'i' || e.key === 'I') toggle('entity')
       else if (e.key === 'b' || e.key === 'B') toggle('bag')
       else if (e.key === 'n' || e.key === 'N') toggle('notebook')
@@ -89,13 +93,14 @@ export function ScenarioScreen({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [view.phase])
+  }, [view.phase, view.board])
 
   // 분위기: 가장 약한 사람의 정신력이 낮을수록 가장자리가 붉어진다
   const lowest = Math.min(...view.players.map((p) => p.stats.sanity))
   const danger = Math.min(1, Math.max(0, (4 - lowest) / 4))
 
   const ended = view.phase === 'ended'
+  const night = view.timeOfDay?.period === 'night'
   const sceneKey = `${view.runNo}-${view.time}-${view.phase}-${view.scene?.title ?? ''}-${view.scene?.text.length ?? 0}`
   const resultKey = `${view.runNo}-${view.result?.nodeId}-${view.time}`
 
@@ -111,15 +116,18 @@ export function ScenarioScreen({
 
   return (
     <ReadingContext value={setReading}>
+     <DistortContext value={lowest <= 3}>
+      {view.timeOfDay && <div className="night-tint" style={{ opacity: night && !ended ? 1 : 0 }} aria-hidden />}
       <div className="vignette" style={{ opacity: danger }} aria-hidden />
       {impact && <div key={impact.id} className={`impact impact-${impact.kind}`} aria-hidden />}
 
       <div className={`mx-auto max-w-2xl px-4 pb-16 pt-5 ${impact?.kind === 'death' ? 'shake' : ''}`}>
         <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           {!ended ? (
-            <div className="grid grid-cols-4 gap-1.5 sm:flex">
+            <div className={`grid gap-1.5 sm:flex ${view.board ? 'grid-cols-5' : 'grid-cols-4'}`}>
               {(
                 [
+                  ...(view.board ? ([['board', '보드', 'Q', view.board.questions.filter((q) => q.solved).length]] as const) : []),
                   ['entity', '대상', 'I', 0],
                   ['bag', '소지품', 'B', view.me.items.length + view.me.facts.length],
                   ['notebook', '단서', 'N', view.notebook.length],
@@ -161,13 +169,27 @@ export function ScenarioScreen({
               </span>
             </div>
             <div className="mt-2 flex items-center justify-between gap-3 text-xs">
-              <span className="rounded border border-amber/30 px-2 py-0.5 text-amber">{view.clockLabel}</span>
+              <span className="flex flex-wrap items-center gap-1.5">
+                {view.timeOfDay && (
+                  <span
+                    className={`rounded border px-2 py-0.5 ${
+                      night ? 'border-glow/40 bg-glow/10 text-glow' : 'border-amber/40 bg-amber/10 text-amber'
+                    }`}
+                  >
+                    <span aria-hidden>{night ? '☾' : '☀'} </span>
+                    {view.timeOfDay.day}일째 {night ? '밤' : '낮'}
+                  </span>
+                )}
+                <span className="rounded border border-amber/30 px-2 py-0.5 text-amber">{view.clockLabel}</span>
+              </span>
               <span className="text-ash">
                 닿아 본 엔딩 {view.endings.reached.length}/{view.endings.total} · 단서 노트 {view.notebook.length}
               </span>
             </div>
           </header>
         )}
+
+        {!ended && view.board && <BoardStrip board={view.board} onOpen={() => setDrawer('board')} />}
 
         {!ended && <ScenarioParty view={view} reading={reading} online={online} />}
 
@@ -224,6 +246,7 @@ export function ScenarioScreen({
       {drawer && !ended && (
         <ScenarioDrawer view={view} journal={journal} tab={drawer} onTab={setDrawer} onClose={() => setDrawer(null)} />
       )}
+     </DistortContext>
     </ReadingContext>
   )
 }
