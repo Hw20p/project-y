@@ -2,7 +2,7 @@
 
 1~4인 협동 추리 텍스트 게임. 규칙과 계획은 [DESIGN.md](DESIGN.md)에 있다.
 
-지금은 엔진 코어와 **1인 UI**가 있다 (멀티 서버는 다음 단계). 진행 상황은 브라우저(`localStorage`)에 저장된다.
+엔진 코어, 1인 UI, **멀티플레이 서버**(방 코드로 최대 4명)가 있다. 혼자 하는 진행 상황은 브라우저(`localStorage`)에 저장된다.
 
 ## 명령
 
@@ -10,7 +10,10 @@ Node 22.12 이상. 엔진 스크립트는 Node의 타입 제거 기능(`--experi
 
 ```bash
 npm install
-npm run dev         # 개발 서버 (http://localhost:5174)
+npm run dev:all     # 서버(8787) + 화면(5174)을 한 번에 — 함께 하기를 시험할 때
+npm run dev         # 화면만 (http://localhost:5174) — 혼자 하기
+npm run server      # 게임 서버만 (포트는 PORT 환경 변수, 기본 8787)
+npm run nettest     # 서버 통합 테스트 (방 만들기·입장·시작·투표·끊김·재접속)
 npm run build       # 타입 검사 + 빌드
 npm run typecheck   # 타입 검사
 npm run validate    # 콘텐츠 검증 (아이템·단서 id, 선택지 조건, 진실 조각 수 등)
@@ -31,10 +34,12 @@ src/
     validate.ts  콘텐츠 검증
     simulate.ts  자동 플레이 봇과 집계
     rng.ts       시드 기반 난수
+  net/       클라이언트–서버 메시지 형식과 검증 (protocol.ts)
   ui/        React 화면. useLocalGame이 엔진을 브라우저에서 직접 돌리고 { view, send }를 돌려준다
   content/   게임 콘텐츠
     entities/    대상 파일 하나 = 대상 하나
     items.ts     아이템·단서 정의
     index.ts     콘텐츠 묶음 (대상을 추가하면 여기에 한 줄)
-scripts/     validate / smoke / simulate
+server/      WebSocket 서버 (index.ts 연결, room.ts 방 로직, main.ts 실행)
+scripts/     validate / smoke / simulate / nettest / dev-all
 ```

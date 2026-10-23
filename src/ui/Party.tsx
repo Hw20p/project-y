@@ -1,7 +1,16 @@
 import type { GameView } from '../engine/view.ts'
 
 /** 파티원 줄: 누가 살아 있고, 누가 읽는 중이고, 누가 골랐고, 누가 계속을 눌렀는지 */
-export function Party({ view, reading }: { view: GameView; reading: string[] }) {
+export function Party({
+  view,
+  reading,
+  online,
+}: {
+  view: GameView
+  reading: string[]
+  /** 온라인 방에서만: 플레이어 id → 접속 중인지 */
+  online?: Record<string, boolean>
+}) {
   const waitingOnChoice = view.phase === 'vote' || view.phase === 'night'
   const waitingOnReady = view.phase === 'briefing' || view.phase === 'result'
 
@@ -11,7 +20,10 @@ export function Party({ view, reading }: { view: GameView; reading: string[] }) 
         const isMe = p.id === view.me.id
         let tag = ''
         let tone = 'text-ash'
-        if (!p.alive) {
+        if (online && online[p.id] === false) {
+          tag = '연결 끊김'
+          tone = 'text-amber'
+        } else if (!p.alive) {
           tag = '쓰러짐'
           tone = 'text-loss'
         } else if (waitingOnChoice) {
