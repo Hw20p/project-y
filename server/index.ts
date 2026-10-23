@@ -28,9 +28,13 @@ function newCode(rooms: Map<string, Room>): string {
   }
 }
 
-export function startServer(port: number): Promise<RunningServer> {
+/**
+ * `host`를 비우면 모든 주소에서 받는다 (개발·같은 와이파이 시험용). 배포에서는 nginx 뒤에 두려고 `127.0.0.1`로 묶는다.
+ * 메시지는 작아서(이름·선택지 id 정도) 16KB를 넘으면 받지 않는다.
+ */
+export function startServer(port: number, host?: string): Promise<RunningServer> {
   const rooms = new Map<string, Room>()
-  const wss = new WebSocketServer({ port })
+  const wss = new WebSocketServer({ port, host, maxPayload: 16 * 1024 })
 
   wss.on('connection', (socket: WebSocket) => {
     const send: Send = (msg: ServerMsg) => {

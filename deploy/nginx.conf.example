@@ -1,0 +1,37 @@
+# Project-Y nginx 설정 예시 (서버에 직접 두는 파일이다. 이 저장소의 배포 스크립트가 건드리지 않는다.)
+#
+# 하는 일: ① 화면(정적 파일)을 내보내고 ② `/ws`로 오는 WebSocket을 서버 프로세스(127.0.0.1:8787)로 이어 준다.
+# 아래 server_name만 실제 주소로 바꾼다. HTTPS는 certbot이 이 블록에 알아서 붙인다:
+#   sudo certbot --nginx -d <도메인>
+server {
+    listen 80;
+    server_name y.example.com;
+
+    # 배포 스크립트가 빌드 결과(dist)를 여기에 올린다
+    root /home/deploy/apps/project-y/web;
+    index index.html;
+
+    # 파일 이름에 해시가 붙는 빌드 결과는 오래 캐시해도 된다
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # 화면: 없는 주소(새로 고침 등)는 index.html로
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # 게임 서버(WebSocket)
+    location /ws {
+        proxy_pass http://127.0.0.1:8787;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        # 서버가 25초마다 ping을 보내므로 이 시간이면 조용한 연결도 끊기지 않는다
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
+    }
+}
