@@ -1,0 +1,243 @@
+import type { Entity } from '../../engine/types.ts'
+
+export default {
+  id: 'a04',
+  code: 'A-04',
+  name: '소원 접수원 루미',
+  type: 'creature',
+  summary:
+    '구내식당 구석 창구에 앉아 있는 작은 소녀. 반짝이는 리본과 헐렁한 직원 조끼 차림이고, 언제나 웃고 있다. 창구에는 “소원 접수”라고 적혀 있다.',
+  observation: [
+    '창구에 소원을 말하면 접수증이 발급되고, 얼마 뒤 소원이 이루어진다.',
+    '이루어진 소원은 한 번도 말한 그대로가 아니었다.',
+    '루미는 자신이 도움이 되고 있다고 굳게 믿는다. 거절당하면 눈에 띄게 풀이 죽는다.',
+  ],
+  manual: [
+    '소원은 한 번에 한 사람이 한 가지만 말한다.',
+    '루미를 칭찬하되 약속은 하지 않는다.',
+    '(이하 내용은 접수증 뒷면에 적혀 있었으나 찢겨 있다.)',
+  ],
+  dayEvents: [
+    {
+      id: 'first-wish',
+      title: '첫 번째 소원',
+      text: '루미가 접수증 철을 펼치며 눈을 반짝인다. “어서 오세요! 오늘의 소원은 무엇인가요?”',
+      choices: [
+        {
+          id: 'small-wish',
+          text: '“따뜻한 커피 한 잔”처럼 사소한 소원을 말한다',
+          baseChance: 0.7,
+          hints: [{ hint: 'wish-literal', text: '소원이 글자 그대로 이루어진다는 걸 알고 있다.' }],
+          success: { text: '커피가 나왔다. 컵 받침까지 정확히 한 사람 몫이었다.', threat: -1, grant: { hints: ['wish-literal'] } },
+          failure: { text: '커피는 나왔지만 컵이 없었다. 손바닥에 그대로 쏟아졌다.', threat: 2 },
+        },
+        {
+          id: 'big-wish',
+          text: '“이 시설에서 안전해지고 싶다”고 말한다',
+          baseChance: 0.3,
+          success: { text: '문이 모두 잠겼다. 안전했다. 나갈 수는 없었다. 루미는 환하게 웃었다.', threat: -4, grant: { fragments: 1 } },
+          failure: { text: '모든 경보가 한꺼번에 꺼졌다. 안전해졌다고, 루미가 말했다.', threat: 6 },
+        },
+        {
+          id: 'ask-rules',
+          text: '소원을 말하지 않고 접수 절차부터 묻는다',
+          baseChance: 0.8,
+          success: { text: '루미는 신이 나서 절차를 설명했다. 접수증 한 장을 덤으로 건네주었다.', grant: { items: ['wishcard'] } },
+          failure: { text: '“소원이 없으신가요?” 루미의 웃음이 아주 조금 굳었다.', threat: 2 },
+        },
+      ],
+    },
+    {
+      id: 'praise',
+      title: '칭찬',
+      text: '루미가 조끼의 이름표를 매만지며 힐끔 쳐다본다. “저, 오늘 잘하고 있나요?”',
+      choices: [
+        {
+          id: 'praise-work',
+          text: '구체적으로 일을 잘하고 있다고 칭찬해 준다',
+          baseChance: 0.75,
+          success: { text: '루미는 두 손으로 얼굴을 가리고 발을 동동 굴렀다. 창구가 한결 밝아졌다.', threat: -2 },
+          failure: { text: '“구체적으로요?” 루미는 메모장을 꺼냈다. 한참 동안 적었다.', threat: 2 },
+        },
+        {
+          id: 'praise-promise',
+          text: '“앞으로도 잘 부탁해”라고 약속처럼 말한다',
+          baseChance: 0.4,
+          success: { text: '루미는 몇 번이나 고개를 끄덕였다. 약속은 접수증처럼 서류철에 끼워졌다.', grant: { items: ['wishcard'], fragments: 1 } },
+          failure: { text: '“약속하셨어요!” 루미가 말했다. 그 말은 서류철에 정확히 기록되었다.', threat: 5, casualty: true },
+        },
+        {
+          id: 'praise-none',
+          text: '대답하지 않고 자리를 뜬다',
+          baseChance: 0.6,
+          success: { text: '루미는 풀이 죽었지만 이내 다음 손님을 기다렸다.' },
+          failure: { text: '루미의 시선이 등 뒤에 오래 남았다. 식당 조명이 한 칸 어두워졌다.', threat: 3 },
+        },
+      ],
+    },
+    {
+      id: 'queue-fake',
+      title: '대리 접수',
+      text: '동료 한 명이 부탁했다. “대신 소원 좀 접수해 줘. 내 이름으로.” 루미가 이쪽을 보고 있다.',
+      choices: [
+        {
+          id: 'proxy',
+          text: '동료의 이름으로 대신 접수한다',
+          baseChance: 0.45,
+          success: { text: '접수증에 동료의 이름이 적혔다. 루미는 대리 접수를 잠깐 의심했지만 도장을 찍었다.', grant: { fragments: 1 } },
+          failure: { text: '이름이 접수되는 순간, 동료가 식당 입구에서 문득 사라졌다 돌아왔다. 하얗게 질린 채로.', threat: 5, casualty: true },
+        },
+        {
+          id: 'refuse-proxy',
+          text: '직접 와서 말하라고 돌려보낸다',
+          baseChance: 0.8,
+          success: { text: '동료는 투덜거리며 돌아갔다. 루미는 규정을 지켰다며 뿌듯해했다.', threat: -1 },
+          failure: { text: '루미가 갑자기 일어섰다. “소원은 접수해야 해요. 누구의 것이든.”', threat: 3 },
+        },
+      ],
+    },
+    {
+      id: 'cancel',
+      title: '소원 취소',
+      text: '한 직원이 창구 앞에서 울고 있다. “취소해 주세요. 제발.” 루미가 곤란한 듯 접수증을 만지작거린다.',
+      choices: [
+        {
+          id: 'help-cancel',
+          text: '루미에게 취소 절차를 찾아 달라고 부탁한다',
+          baseChance: 0.5,
+          boosts: [{ item: 'wishcard', bonus: 0.2 }],
+          success: { text: '루미는 서류철을 한참 뒤적이다 “취소 양식”을 찾아냈다. 직원이 안도의 한숨을 쉬었다.', threat: -3, grant: { fragments: 1 } },
+          failure: { text: '“취소는 또 하나의 소원이에요.” 루미가 밝게 말했다. 접수증이 한 장 늘었다.', threat: 4 },
+        },
+        {
+          id: 'comfort',
+          text: '직원을 데리고 조용히 자리를 옮긴다',
+          baseChance: 0.75,
+          success: { text: '직원은 한동안 말이 없다가 소원의 내용을 털어놓았다. 기록해 두었다.', grant: { hints: ['wish-third'] } },
+          failure: { text: '직원은 끌려가면서도 창구에서 시선을 떼지 못했다.', threat: 2 },
+        },
+        {
+          id: 'burn',
+          text: '접수증을 빼앗아 태운다',
+          baseChance: 0.25,
+          success: { text: '접수증이 재가 되자 소원도 같이 사라졌다. 루미는 놀란 얼굴로 가만히 앉아 있었다.', threat: -4 },
+          failure: { text: '재가 된 접수증에서 연기가 한 줄로 이어져 천장으로 올랐다.', threat: 6, casualty: true },
+        },
+      ],
+    },
+    {
+      id: 'third',
+      title: '세 번째',
+      text: '루미가 접수증 두 장을 가지런히 놓고 말한다. “소원이 두 번째까지 접수되었습니다. 세 번째는 어떠세요?”',
+      choices: [
+        {
+          id: 'accept-third',
+          text: '세 번째 소원을 말해 본다',
+          baseChance: 0.2,
+          success: { text: '접수원의 이름표가 뒤바뀌어 있었다. 지금 창구에 앉아 있는 것은 다른 사람이었다. 그 사람이 조용히 사원증을 내밀었다.', grant: { items: ['keycard'], fragments: 1 } },
+          failure: { text: '소원을 입에 올리자마자 이름표가 바뀌었다. 창구 너머에 앉은 것은 우리 중 하나였다.', threat: 7, casualty: true },
+        },
+        {
+          id: 'decline-third',
+          text: '정중히 거절한다',
+          baseChance: 0.8,
+          success: { text: '루미는 서운해하면서도 접수증 철을 덮었다. “그럼 다음에요!”' },
+          failure: { text: '거절의 말이 끝나기도 전에 접수 도장이 찍히는 소리가 났다.', threat: 4 },
+        },
+        {
+          id: 'ask-third-rule',
+          text: '세 번째 소원이 어떻게 되는지 묻는다',
+          baseChance: 0.5,
+          success: { text: '“그건 말씀드릴 수 없어요.” 루미의 시선이 이름표로 내려갔다. 이름표가 낡아 있었다.', grant: { hints: ['wish-third'] } },
+          failure: { text: '“궁금하시면 접수해 보세요!” 루미는 활짝 웃었다.', threat: 3 },
+        },
+      ],
+    },
+    {
+      id: 'overtime',
+      title: '야근',
+      text: '식당 불이 모두 꺼진 밤에도 창구 하나만 켜져 있다. 루미는 접수증을 쌓으며 중얼거린다. “쉬면 소원이 밀려요.”',
+      choices: [
+        {
+          id: 'help-work',
+          text: '접수증 정리를 도와준다',
+          baseChance: 0.65,
+          success: { text: '정리하는 사이 루미가 기쁜 얼굴로 감사 인사를 했다. 접수증 한 장이 슬쩍 건네졌다.', threat: -2, grant: { items: ['wishcard'] } },
+          failure: { text: '정리하다 한 사람의 이름이 적힌 접수증을 보았다. 이미 이루어진 상태였다.', threat: 4 },
+        },
+        {
+          id: 'send-rest',
+          text: '루미에게 퇴근하라고 권한다',
+          baseChance: 0.45,
+          success: { text: '루미는 한동안 주저하다 조끼를 벗었다. 불이 꺼졌다. 오랜만에 식당이 조용했다.', threat: -4 },
+          failure: { text: '“퇴근이요? 퇴근이 뭐예요?” 루미가 처음으로 웃지 않았다.', threat: 5 },
+        },
+      ],
+    },
+  ],
+  night: {
+    title: '구내식당, 불이 꺼진 뒤',
+    text: '식당에는 창구 하나만 켜져 있다. 루미는 접수증 더미 사이에서 졸고 있다. 각자 움직인다.',
+    choices: [
+      {
+        id: 'steal-card',
+        text: '졸고 있는 사이 접수증을 한 장 가져온다',
+        baseChance: 0.6,
+        success: { text: '접수증은 따뜻했다. 아무도 눈치채지 못했다.', grant: { items: ['wishcard'] } },
+        failure: { text: '“소원이 있으신가요?” 루미가 눈을 감은 채 물었다. 대답하지 않고 물러났다.', threat: 3 },
+      },
+      {
+        id: 'read-stack',
+        text: '쌓인 접수증을 밤새 읽어 본다',
+        baseChance: 0.5,
+        success: { text: '이루어진 소원들의 공통점이 보였다. 한 번에 하나, 빠진 말이 대가가 된다.', grant: { hints: ['wish-literal'], fragments: 1 } },
+        failure: { text: '읽는 도중 접수증 한 장에 자기 이름이 적혀 있는 것을 보았다. 날짜가 비어 있었다.', threat: 4 },
+      },
+      {
+        id: 'ask-sleep',
+        text: '자고 있는 루미의 잠꼬대를 듣는다',
+        baseChance: 0.55,
+        success: { text: '“세 번째는… 안 받아요… 내가 앉으니까…” 잠꼬대는 거기서 끊겼다.', grant: { hints: ['wish-third'] } },
+        failure: { text: '루미가 잠결에 중얼거렸다. “접수되었습니다.” 무엇이 접수되었는지는 알 수 없었다.', threat: 3 },
+      },
+      {
+        id: 'vest-hunt',
+        text: '주방 창고를 뒤져 쓸 만한 것을 찾는다',
+        baseChance: 0.4,
+        success: { text: '조리복 더미 아래에 방호복 한 벌이 있었다.', grant: { items: ['vest'] } },
+        failure: { text: '냉동고 문이 닫히는 소리가 났다. 그곳에는 아무것도 없었다.', threat: 2 },
+      },
+    ],
+  },
+  decisions: [
+    {
+      id: 'release',
+      kind: 'release',
+      text: '루미를 정식 직원으로 채용해 시설 전체에 창구를 연다 (방생)',
+      baseChance: 0.5,
+      success: { text: '루미는 울면서 웃었다. 시설 곳곳에 “소원 접수” 팻말이 세워졌다. 글자 그대로의 소원이 이루어지기 시작했다.', threat: 9, grant: { fragments: 1 } },
+      failure: { text: '채용 서류에 서명하는 순간 창구가 열 개로 늘었다.', threat: 15, casualty: true },
+    },
+    {
+      id: 'contain',
+      kind: 'contain',
+      text: '창구를 폐쇄하고 “점검 중” 팻말을 건다 (격리)',
+      baseChance: 0.8,
+      success: { text: '루미는 팻말을 보고 고개를 숙였다. “다음 근무 때 뵐게요.” 창구에 천이 덮였다.', threat: -4 },
+      failure: { text: '팻말을 걸자마자 안쪽에서 도장 찍는 소리가 났다. 쿵, 쿵.', threat: 6 },
+    },
+    {
+      id: 'terminate',
+      kind: 'terminate',
+      text: '루미의 소원을 접수해서 스스로 사라지게 만든다 (처리)',
+      baseChance: 0.25,
+      boosts: [{ item: 'wishcard', bonus: 0.25 }],
+      hints: [
+        { hint: 'wish-literal', text: '소원의 문장에 "빠진 말"을 넣어 루미 자신의 소원을 접수시킬 수 있다.' },
+        { hint: 'wish-third', text: '세 번째 소원을 루미가 대신 받게 하면 접수원이 바뀐다.' },
+      ],
+      success: { text: '“저, 이제 퇴근해도 되나요?” 루미가 처음으로 자기 소원을 말했다. 도장이 찍혔다. 창구는 비어 있었다.', threat: -12 },
+      failure: { text: '접수된 소원은 우리 쪽의 것이었다. 도장 소리와 함께 한 사람의 이름이 지워졌다.', threat: 10, casualty: true },
+    },
+  ],
+} satisfies Entity

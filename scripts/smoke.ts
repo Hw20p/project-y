@@ -57,8 +57,14 @@ const advance = (until: string) => {
     }
   }
 }
-advance('night')
+// 낮에 누가 죽는 시드는 건너뛰고, 둘 다 살아서 밤에 닿는 시드를 찾는다.
+for (let seed = 11; seed < 300; seed++) {
+  s = createGame(ctx, { seed, players })
+  advance('night')
+  if (s.phase === 'night' && s.players.every((p) => p.alive)) break
+}
 assert.equal(s.phase, 'night')
+assert.ok(s.players.every((p) => p.alive))
 const viewA = viewFor(ctx, s, 'a')
 assert.deepEqual(
   viewA.scene?.choices.map((c) => c.id),
@@ -77,6 +83,25 @@ if (resultB?.kind === 'night') {
   assert.ok(!('text' in other) && !('choiceId' in other), '남의 밤 결과 문장·선택은 숨겨진다')
 }
 console.log('통과: 밤 결과 비공개')
+
+// 3-2) 낮 투표는 누가 무엇을 고르고 있는지 실시간으로 보인다
+{
+  let v = createGame(ctx, { seed: 5, players })
+  v = reduce(ctx, v, { type: 'ready', playerId: 'a' })
+  v = reduce(ctx, v, { type: 'ready', playerId: 'b' })
+  const [first, second] = voteChoices(ctx, v)
+  v = reduce(ctx, v, { type: 'vote', playerId: 'a', choiceId: first.id })
+  const seenByB = viewFor(ctx, v, 'b').scene!.choices
+  assert.deepEqual(seenByB.find((c) => c.id === first.id)!.voterIds, ['a'])
+  v = reduce(ctx, v, { type: 'vote', playerId: 'b', choiceId: second.id })
+  const result = viewFor(ctx, v, 'a').result
+  assert.equal(result?.kind, 'team')
+  if (result?.kind === 'team') {
+    assert.equal(result.tie, true, '1:1이면 동률')
+    assert.deepEqual(result.votes, { a: first.id, b: second.id })
+  }
+  console.log('통과: 투표 현황 공개')
+}
 
 // 4) 한 달이 끝나면 다음 달로 넘어간다
 const monthBefore = s.monthNumber

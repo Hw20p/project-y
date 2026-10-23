@@ -12,11 +12,22 @@ import {
 import type { Ending, GameState, MonthEndResult, NightEntry, TeamResult } from './state.ts'
 import type { Beat, Choice, GameContext, HintDef, ItemDef } from './types.ts'
 
+/**
+ * 클라이언트가 보내는 행동. 누가 보냈는지는 서버(또는 로컬 어댑터)가 접속 정보로 채우므로 `playerId`가 없다.
+ * `force`(강제 진행)는 방장·타이머 전용이라 여기에 넣지 않았다.
+ */
+export type ClientAction =
+  | { type: 'ready' }
+  | { type: 'vote'; choiceId: string }
+  | { type: 'night'; choiceId: string }
+
 export interface ChoiceView {
   id: string
   text: string
   /** 내가 가진 단서가 이 선택지에 대해 말해 주는 것 */
   notes: string[]
+  /** 지금 이 선택지를 고른 사람들 (낮·결정만. 고른 것은 결과가 나오기 전까지 바꿀 수 있다). 밤에는 항상 비어 있다. */
+  voterIds: string[]
 }
 
 export interface PlayerView {
@@ -86,8 +97,15 @@ export function viewFor(ctx: GameContext, state: GameState, playerId: string): G
   const entity = currentEntity(ctx, state)
   const beat = currentBeat(state)
 
-  const toChoiceViews = (choices: Choice[]): ChoiceView[] =>
-    choices.map((c) => ({ id: c.id, text: c.text, notes: noteFor(c, me.hints) }))
+  const toChoiceViews = (choices: Choice[], showVoters: boolean): ChoiceView[] =>
+    choices.map((c) => ({
+      id: c.id,
+      text: c.text,
+      notes: noteFor(c, me.hints),
+      voterIds: showVoters
+        ? state.players.filter((p) => p.alive && state.votes[p.id] === c.id).map((p) => p.id)
+        : [],
+    }))
 
   let scene: SceneView | null = null
   if (entity && state.phase === 'vote' && beat && beat !== 'night') {
@@ -96,7 +114,7 @@ export function viewFor(ctx: GameContext, state: GameState, playerId: string): G
       beat,
       title: beat === 'decision' ? '결정' : day!.title,
       text: beat === 'decision' ? `${entity.name}을(를) 어떻게 할 것인가.` : day!.text,
-      choices: toChoiceViews(voteChoices(ctx, state)),
+      choices: toChoiceViews(voteChoices(ctx, state), true),
       myChoiceId: state.votes[me.id] ?? null,
     }
   } else if (entity && state.phase === 'night') {
@@ -104,7 +122,7 @@ export function viewFor(ctx: GameContext, state: GameState, playerId: string): G
       beat: 'night',
       title: entity.night.title,
       text: entity.night.text,
-      choices: toChoiceViews(nightChoicesFor(ctx, state, me.id)),
+      choices: toChoiceViews(nightChoicesFor(ctx, state, me.id), false),
       myChoiceId: state.night?.picks[me.id] ?? null,
     }
   }

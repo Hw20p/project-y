@@ -62,12 +62,18 @@ export interface TeamResult extends Effects {
   actorId: string
   /** 플레이어 id → 고른 선택지 id */
   votes: Record<string, string>
+  /** 그때 있던 선택지들 (투표 결과를 문장으로 보여 주기 위함) */
+  options: { id: string; text: string }[]
+  /** 최다 득표가 동률이라 무작위로 정해졌는지 */
+  tie: boolean
 }
 
 export interface NightEntry extends Effects {
   playerId: string
   /** 아무것도 고르지 않았으면 null */
   choiceId: string | null
+  /** 고른 선택지 문장. 아무것도 고르지 않았으면 빈 문자열 */
+  choiceText: string
   success: boolean
   text: string
 }

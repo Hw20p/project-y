@@ -4,10 +4,12 @@ import type { GameContext } from '../engine/types.ts'
 import a01 from './entities/a01-lullaby.ts'
 import a02 from './entities/a02-b7-lobby.ts'
 import a03 from './entities/a03-vending.ts'
+import a04 from './entities/a04-wish-clerk.ts'
+import a05 from './entities/a05-roof-garden.ts'
 import { hints, items } from './items.ts'
 
 export const context: GameContext = {
-  entities: [a01, a02, a03],
+  entities: [a01, a02, a03, a04, a05],
   items,
   hints,
 }
