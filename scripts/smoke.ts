@@ -12,7 +12,7 @@ import { demo } from '../src/scenario/fixtures/demo.ts'
 import type { ScenarioGame } from '../src/scenario/state.ts'
 import type { Scenario } from '../src/scenario/types.ts'
 import { validateScenario } from '../src/scenario/validate.ts'
-import { viewForScenario } from '../src/scenario/view.ts'
+import { tiedChoiceIds, viewForScenario } from '../src/scenario/view.ts'
 
 const two = [
   { id: 'a', name: '가' },
@@ -168,6 +168,8 @@ function seedWithCode(code: string): number {
   g = act(g, { type: 'vote', playerId: 'b', choiceId: 'blue' })
   assert.equal(g.run.phase, 'vote', '동률이면 진행하지 않는다')
   assert.equal(viewForScenario(demo, g, 'a').scene!.tie, true)
+  assert.deepEqual(tiedChoiceIds(viewForScenario(demo, g, 'a').scene).sort(), ['blue', 'red'], '동률인 선택지만 추천 후보가 된다')
+  assert.deepEqual(tiedChoiceIds(viewForScenario(demo, walkToDoor(blueSeed), 'a').scene), [], '동률이 아니면 후보가 없다')
   assert.deepEqual(viewForScenario(demo, g, 'b').scene!.choices.find((c) => c.id === 'blue')!.pickerIds, ['b'])
 
   // 한 명이 마음을 바꾸면 모아진다 → 정답(파랑)이라 정문으로 (엔딩, 진엔딩)

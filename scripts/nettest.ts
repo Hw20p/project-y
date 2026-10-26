@@ -224,8 +224,34 @@ try {
   const clients = [a, b2]
   const start = Date.now()
   let lastForce = 0
+  let tieChecked = false
   while (!(a.state?.view.phase === 'ended' && b2.state?.view.phase === 'ended')) {
     if (Date.now() - start > 60000) throw new Error('시간 초과: 엔딩까지 진행')
+
+    // 처음 만난 투표에서 서로 다른 선택지를 골라 동률을 만들고, 무작위 추천이 동률인 선택지 중에서 나오는지 본다
+    if (!tieChecked && a.state?.view.phase === 'vote' && b2.state?.view.phase === 'vote') {
+      const sa = a.view.scene!
+      const sb = b2.view.scene!
+      const open = sa.choices.filter((x) => !x.locked)
+      if (open.length >= 2 && !sa.myChoiceId && !sb.myChoiceId && !a.view.me.panic && !b2.view.me.panic) {
+        tieChecked = true
+        a.send({ t: 'saction', action: { type: 'vote', choiceId: open[0].id } })
+        b2.send({ t: 'saction', action: { type: 'vote', choiceId: open[1].id } })
+        await until('동률', () => a.state?.view.scene?.tie === true && b2.state?.view.scene?.tie === true)
+        assert.equal(a.state!.suggestion, null, '추천을 누르기 전에는 추천이 없다')
+        b2.send({ t: 'suggest' })
+        await until('추천 전달', () => a.state?.suggestion != null && a.state.suggestion === b2.state?.suggestion)
+        assert.ok([open[0].id, open[1].id].includes(a.state!.suggestion!), '추천은 동률인 선택지 중에서 나온다')
+        assert.equal(a.state!.view.phase, 'vote', '추천은 투표 결과를 바꾸지 않는다')
+        // 한쪽으로 모이면 진행되고 추천은 사라진다
+        a.send({ t: 'saction', action: { type: 'vote', choiceId: open[1].id } })
+        await until('동률 해소', () => a.state?.view.phase !== 'vote' && b2.state?.view.phase !== 'vote')
+        assert.equal(a.state!.suggestion, null)
+        console.log('통과: 동률 투표의 무작위 추천')
+        continue
+      }
+    }
+
     let moved = false
     for (const c of clients) moved = step(c) || moved
     // 동률이나 정원으로 막히면 방장이 강제로 진행한다

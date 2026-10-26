@@ -44,7 +44,7 @@ export function ScenarioScreen({
   /** 자리를 완전히 비우고 나가기 (엔딩 중에는 주지 않는다) */
   onLeave?: () => void
 }) {
-  const { view, send, reading, setReading, online, roomCode, isHost, reconnecting, force, journalKey } = client
+  const { view, send, reading, setReading, suggestion, suggest, online, roomCode, isHost, reconnecting, force, journalKey } = client
 
   // 지난 기록: 판마다 브라우저에 저장해 새로 고침해도 이어진다
   const [journal, setJournal] = useState<JournalEntry[]>(() => loadJournal(journalKey))
@@ -87,8 +87,7 @@ export function ScenarioScreen({
       else if (view.phase === 'ended') return
       else if ((e.key === 'q' || e.key === 'Q') && view.board) toggle('board')
       else if (e.key === 'i' || e.key === 'I') toggle('entity')
-      else if (e.key === 'b' || e.key === 'B') toggle('bag')
-      else if (e.key === 'n' || e.key === 'N') toggle('notebook')
+      else if (e.key === 'b' || e.key === 'B' || e.key === 'n' || e.key === 'N') toggle('clues')
       else if (e.key === 'j' || e.key === 'J') toggle('journal')
     }
     window.addEventListener('keydown', onKey)
@@ -124,14 +123,12 @@ export function ScenarioScreen({
       <div className={`mx-auto max-w-2xl px-4 pb-16 pt-5 ${impact?.kind === 'death' ? 'shake' : ''}`}>
         <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           {!ended ? (
-            <div className={`grid gap-1.5 sm:flex ${view.board ? 'grid-cols-5' : 'grid-cols-4'}`}>
+            <div className={`grid gap-1.5 sm:flex ${view.board ? 'grid-cols-3' : 'grid-cols-2'}`}>
               {(
                 [
-                  ...(view.board ? ([['board', '보드', 'Q', view.board.questions.filter((q) => q.solved).length]] as const) : []),
-                  ['entity', '대상', 'I', 0],
-                  ['bag', '소지품', 'B', view.me.items.length + view.me.facts.length],
-                  ['notebook', '단서', 'N', view.notebook.length],
-                  ['journal', '기록', 'J', journal.length],
+                  ...(view.board ? ([['board', '조사 보드', 'Q', view.board.questions.filter((q) => q.solved).length]] as const) : []),
+                  ['clues', '단서·소지품', 'N', view.me.items.length + view.me.facts.length],
+                  ['entity', '자료', 'I', 0],
                 ] as const
               ).map(([id, label, key, count]) => (
                 <button
@@ -210,7 +207,7 @@ export function ScenarioScreen({
         <main className="mt-2">
           {view.phase === 'story' && view.scene && <StoryScene key={sceneKey} view={view} send={send} />}
           {(view.phase === 'vote' || view.phase === 'split') && view.scene && (
-            <ChoiceScene key={sceneKey} view={view} send={send} reading={reading} />
+            <ChoiceScene key={sceneKey} view={view} send={send} reading={reading} suggestion={suggestion} suggest={suggest} />
           )}
           {view.phase === 'personal' && view.scene && (
             <PersonalScene key={sceneKey} view={view} send={send} reading={reading} />

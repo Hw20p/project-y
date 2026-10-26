@@ -1,9 +1,10 @@
-// 시나리오 정보 패널: 대상 정보 · 소지품(이번 판) · 단서 노트(지난 판까지) · 지난 기록
+// 시나리오 정보 패널. 위쪽 메뉴는 셋이다: 조사 보드 · 단서·소지품(이번 판 소지품과 알아낸 것, 지난 판까지의 단서 노트) ·
+// 자료(대상 정보와 지난 기록, 안에서 전환한다).
 import type { ScenarioView } from '../../scenario/view.ts'
 import type { JournalEntry } from '../storage.ts'
 import { BoardPanel } from './Board.tsx'
 
-export type ScenarioTab = 'board' | 'entity' | 'bag' | 'notebook' | 'journal'
+export type ScenarioTab = 'board' | 'clues' | 'entity' | 'journal'
 
 const TYPE_LABEL: Record<string, string> = { creature: '생명체', place: '장소', object: '물건' }
 
@@ -21,12 +22,11 @@ export function ScenarioDrawer({
   onClose: () => void
 }) {
   const e = view.entity
-  const tabs: { id: ScenarioTab; label: string; key: string; badge?: number }[] = [
-    ...(view.board ? [{ id: 'board' as const, label: '조사 보드', key: 'Q' }] : []),
-    { id: 'entity', label: '대상 정보', key: 'I' },
-    { id: 'bag', label: '소지품', key: 'B', badge: view.me.items.length + view.me.facts.length },
-    { id: 'notebook', label: '단서 노트', key: 'N', badge: view.notebook.length },
-    { id: 'journal', label: '지난 기록', key: 'J', badge: journal.length },
+  /** `on`: 이 메뉴가 켜져 있는 것으로 보이는 탭들 (자료는 대상 정보와 지난 기록을 함께 품는다) */
+  const tabs: { id: ScenarioTab; label: string; key: string; badge?: number; on: ScenarioTab[] }[] = [
+    ...(view.board ? [{ id: 'board' as const, label: '조사 보드', key: 'Q', on: ['board' as const] }] : []),
+    { id: 'clues', label: '단서·소지품', key: 'N', badge: view.me.items.length + view.me.facts.length, on: ['clues'] },
+    { id: 'entity', label: '자료', key: 'I', on: ['entity', 'journal'] },
   ]
 
   return (
@@ -41,7 +41,7 @@ export function ScenarioDrawer({
                 type="button"
                 onClick={() => onTab(t.id)}
                 className={`shrink-0 rounded px-2.5 py-2.5 text-sm sm:px-3 sm:py-1.5 ${
-                  tab === t.id ? 'bg-glow/15 text-glow' : 'text-fog hover:text-bone'
+                  t.on.includes(tab) ? 'bg-glow/15 text-glow' : 'text-fog hover:text-bone'
                 }`}
               >
                 {t.label}
@@ -55,6 +55,29 @@ export function ScenarioDrawer({
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-5">
+          {(tab === 'entity' || tab === 'journal') && (
+            <div className="mb-5 flex gap-2 text-xs">
+              {(
+                [
+                  ['entity', '대상 정보'],
+                  ['journal', '지난 기록'],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => onTab(id)}
+                  className={`rounded-full border px-3 py-1 ${
+                    tab === id ? 'border-glow/50 bg-glow/10 text-glow' : 'border-edge text-fog hover:text-bone'
+                  }`}
+                >
+                  {label}
+                  {id === 'journal' && journal.length > 0 && <span className="ml-1 text-ash">{journal.length}</span>}
+                </button>
+              ))}
+            </div>
+          )}
+
           {tab === 'board' && view.board && <BoardPanel board={view.board} />}
 
           {tab === 'entity' && (
@@ -115,7 +138,7 @@ export function ScenarioDrawer({
             </div>
           )}
 
-          {tab === 'bag' && (
+          {tab === 'clues' && (
             <div className="space-y-5">
               {view.me.items.length === 0 && view.me.facts.length === 0 && <p className="text-sm text-ash">아직 가진 것이 없다.</p>}
               {view.me.items.length > 0 && (
@@ -146,8 +169,9 @@ export function ScenarioDrawer({
             </div>
           )}
 
-          {tab === 'notebook' && (
-            <div>
+          {tab === 'clues' && (
+            <div className="mt-8 border-t border-edge pt-6">
+              <h3 className="mb-2 text-xs text-ash">단서 노트</h3>
               <p className="text-xs leading-6 text-ash">
                 지금까지 알아낸 사실의 기록이다. 판이 바뀌어도 남는다. 정답을 알려 주는 것이 아니라, 무엇을 알아냈는지만 적혀 있다.
                 판마다 바뀌는 값(어느 자리, 몇 개…)은 적혀 있지 않다.
@@ -191,7 +215,7 @@ export function ScenarioDrawer({
         </div>
 
         <p className="kbd-hint border-t border-edge px-4 py-2 text-xs text-ash/80">
-          {tabs.map((t) => `${t.key} ${t.label}`).join(' · ')}
+          {[...tabs.map((t) => `${t.key} ${t.label}`), 'J 지난 기록'].join(' · ')}
         </p>
         <div className="pb-[env(safe-area-inset-bottom)]" />
       </aside>

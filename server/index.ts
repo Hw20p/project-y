@@ -118,6 +118,9 @@ export function startServer(port: number, host?: string): Promise<RunningServer>
         case 'reading':
           room.setReading(member, msg.reading)
           return
+        case 'suggest':
+          room.suggest(member)
+          return
         case 'force':
           room.force(member)
           return

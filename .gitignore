@@ -28,3 +28,6 @@ npm-debug.log*
 # OS
 .DS_Store
 Thumbs.db
+
+# 개인 메모 (공략 등, 커밋하지 않는다)
+private/

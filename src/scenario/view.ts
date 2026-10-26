@@ -158,6 +158,13 @@ function growthHints(effects: Effect[] | undefined): string[] {
 
 const BASE_SCENE = { choices: [], tie: false, myChoiceId: null, solo: null, mineDone: false, myLines: [] } satisfies Partial<SceneView>
 
+/** 투표가 동률일 때 동률로 맞선 선택지들 (동률이 아니면 비어 있다). 무작위 추천은 이 중에서 고른다. */
+export function tiedChoiceIds(scene: SceneView | null): string[] {
+  if (!scene?.tie) return []
+  const top = Math.max(0, ...scene.choices.map((c) => c.pickerIds.length))
+  return scene.choices.filter((c) => c.pickerIds.length === top).map((c) => c.id)
+}
+
 /** 변화 중 이 사람에게 보여 줄 것: 아이템·단서는 본인 것만, 나머지(스텟·부상·시간)는 모두에게 */
 function visibleTo(changes: Change[], playerId: string): Change[] {
   return changes.filter((c) => (c.kind !== 'item' && c.kind !== 'fact') || c.playerId === playerId)

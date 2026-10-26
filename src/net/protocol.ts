@@ -34,6 +34,8 @@ export type ClientMsg =
   | { t: 'retry' }
   /** 서술을 읽는 중인지 (일시적 접속 정보, 게임 상태가 아님) */
   | { t: 'reading'; reading: boolean }
+  /** 투표가 동률일 때 누구나: 동률인 선택지 중 하나를 무작위로 추천받는다 (일시적 접속 정보, 게임 상태가 아님) */
+  | { t: 'suggest' }
   /** 방장 전용: 안 고른 사람을 기다리지 않고 지금 있는 선택만으로 진행 */
   | { t: 'force' }
   /** 방장 전용, 엔딩 뒤: 같은 방의 대기실로 돌아가 대상을 다시 고른다 */
@@ -83,6 +85,8 @@ export type ServerMsg =
       hostId: string
       online: Record<string, boolean>
       reading: string[]
+      /** 동률 투표에서 무작위로 추천된 선택지 id (추천이 없거나 더는 동률이 아니면 null) */
+      suggestion: string | null
       view: ScenarioView
     }
   | { t: 'error'; message: string }
@@ -111,6 +115,7 @@ export function parseClientMsg(raw: string): ClientMsg | null {
       return isString(m.code, 16) && isString(m.token, 128) ? { t: 'rejoin', code: m.code, token: m.token } : null
     case 'start':
     case 'force':
+    case 'suggest':
     case 'rematch':
     case 'retry':
     case 'leave':

@@ -78,7 +78,19 @@ export function StoryScene({ view, send }: { view: ScenarioView; send: Send }) {
 
 // ───────────────────────── 추리(투표) · 조합(분할) ─────────────────────────
 
-export function ChoiceScene({ view, send, reading }: { view: ScenarioView; send: Send; reading: string[] }) {
+export function ChoiceScene({
+  view,
+  send,
+  reading,
+  suggestion,
+  suggest,
+}: {
+  view: ScenarioView
+  send: Send
+  reading: string[]
+  suggestion: string | null
+  suggest: () => void
+}) {
   void reading
   const scene = view.scene!
   const isVote = scene.kind === 'vote'
@@ -124,6 +136,7 @@ export function ChoiceScene({ view, send, reading }: { view: ScenarioView; send:
           {scene.choices.map((c, i) => {
             const mine = scene.myChoiceId === c.id
             const leading = isVote && multi && leaders.length === 1 && leaders[0].id === c.id
+            const suggested = scene.tie && suggestion === c.id
             const disabled = !!c.locked || blocked || (c.full && !mine)
             return (
               <li key={c.id} className="rise" style={{ animationDelay: `${i * 80}ms` }}>
@@ -136,9 +149,11 @@ export function ChoiceScene({ view, send, reading }: { view: ScenarioView; send:
                       ? 'border-glow/70 bg-glow/10'
                       : c.locked
                         ? 'border-edge/60 bg-transparent'
-                        : leading
-                          ? 'border-amber/40 bg-panel'
-                          : 'border-edge bg-panel/60 hover:border-fog/50 hover:bg-panel'
+                        : suggested
+                          ? 'border-amber/60 bg-amber/5'
+                          : leading
+                            ? 'border-amber/40 bg-panel'
+                            : 'border-edge bg-panel/60 hover:border-fog/50 hover:bg-panel'
                   } disabled:cursor-default ${c.locked ? 'opacity-60' : disabled ? 'opacity-50' : ''}`}
                 >
                   <span className="flex gap-3">
@@ -163,12 +178,26 @@ export function ChoiceScene({ view, send, reading }: { view: ScenarioView; send:
                       )}
                     </span>
                     {leading && <span className="text-xs text-amber">다수</span>}
+                    {suggested && <span className="pop text-xs text-amber">추천</span>}
                   </span>
                 </button>
               </li>
             )
           })}
         </ul>
+
+        {scene.tie && (
+          <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+            <button
+              type="button"
+              onClick={suggest}
+              className="rounded border border-amber/50 px-3 py-1.5 text-xs text-amber transition hover:bg-amber/10"
+            >
+              {suggestion ? '다시 추천받기' : '무작위로 추천받기'}
+            </button>
+            <span className="text-xs text-ash">동률인 선택지 중 하나를 골라 준다. 추천은 참고일 뿐, 각자 다시 골라야 진행된다.</span>
+          </div>
+        )}
 
         <p className="mt-4 text-xs text-ash">
           {scene.tie && (
