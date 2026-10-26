@@ -3,6 +3,7 @@
 import type { ScenarioView } from '../../scenario/view.ts'
 import type { JournalEntry } from '../storage.ts'
 import { BoardPanel } from './Board.tsx'
+import { clueWho } from './parts.tsx'
 
 export type ScenarioTab = 'board' | 'clues' | 'entity' | 'journal'
 
@@ -22,10 +23,13 @@ export function ScenarioDrawer({
   onClose: () => void
 }) {
   const e = view.entity
+  // 나의 단서: 이번 판에서 내가 얻은 것 + 지난 판에서 단서 노트에 남은 것(이번 판에 다시 얻은 것은 위에 있으므로 뺀다)
+  const mine = view.clues.filter((c) => c.by.some((b) => b.id === view.me.id))
+  const past = view.notebook.filter((f) => !mine.some((c) => c.id === f.id))
   /** `on`: 이 메뉴가 켜져 있는 것으로 보이는 탭들 (자료는 대상 정보와 지난 기록을 함께 품는다) */
   const tabs: { id: ScenarioTab; label: string; key: string; badge?: number; on: ScenarioTab[] }[] = [
     ...(view.board ? [{ id: 'board' as const, label: '조사 보드', key: 'Q', on: ['board' as const] }] : []),
-    { id: 'clues', label: '단서·소지품', key: 'N', badge: view.me.items.length + view.me.facts.length, on: ['clues'] },
+    { id: 'clues', label: '단서·소지품', key: 'N', badge: view.me.items.length + view.clues.length, on: ['clues'] },
     { id: 'entity', label: '자료', key: 'I', on: ['entity', 'journal'] },
   ]
 
@@ -78,7 +82,7 @@ export function ScenarioDrawer({
             </div>
           )}
 
-          {tab === 'board' && view.board && <BoardPanel board={view.board} />}
+          {tab === 'board' && view.board && <BoardPanel board={view.board} view={view} />}
 
           {tab === 'entity' && (
             <div>
@@ -140,7 +144,7 @@ export function ScenarioDrawer({
 
           {tab === 'clues' && (
             <div className="space-y-5">
-              {view.me.items.length === 0 && view.me.facts.length === 0 && <p className="text-sm text-ash">아직 가진 것이 없다.</p>}
+              {view.me.items.length === 0 && view.clues.length === 0 && <p className="text-sm text-ash">아직 없다.</p>}
               {view.me.items.length > 0 && (
                 <div>
                   <h3 className="mb-2 text-xs text-ash">아이템</h3>
@@ -154,13 +158,14 @@ export function ScenarioDrawer({
                   </ul>
                 </div>
               )}
-              {view.me.facts.length > 0 && (
+              {view.clues.length > 0 && (
                 <div>
-                  <h3 className="mb-2 text-xs text-ash">이번 판에서 알아낸 것 (나만 안다 — 말로 전해야 한다)</h3>
+                  <h3 className="mb-2 text-xs text-ash">모든 단서</h3>
                   <ul className="space-y-2">
-                    {view.me.facts.map((f) => (
-                      <li key={f.id} className="font-serif-kr text-sm leading-7 text-glow">
-                        ◆ {f.text}
+                    {view.clues.map((c) => (
+                      <li key={c.id} className="font-serif-kr text-sm leading-7 text-glow">
+                        ◆ {c.text}
+                        <span className="ml-2 font-sans text-xs text-ash">{clueWho(c.by, view)}</span>
                       </li>
                     ))}
                   </ul>
@@ -171,16 +176,19 @@ export function ScenarioDrawer({
 
           {tab === 'clues' && (
             <div className="mt-8 border-t border-edge pt-6">
-              <h3 className="mb-2 text-xs text-ash">단서 노트</h3>
-              <p className="text-xs leading-6 text-ash">
-                지금까지 알아낸 사실의 기록이다. 판이 바뀌어도 남는다. 정답을 알려 주는 것이 아니라, 무엇을 알아냈는지만 적혀 있다.
-                판마다 바뀌는 값(어느 자리, 몇 개…)은 적혀 있지 않다.
-              </p>
-              <ul className="mt-4 space-y-2">
-                {view.notebook.length === 0 && <li className="text-sm text-ash">아직 적힌 것이 없다.</li>}
-                {view.notebook.map((f) => (
-                  <li key={f.id} className="font-serif-kr text-sm leading-7 text-glow">
+              <h3 className="mb-2 text-xs text-ash">나의 단서</h3>
+              <ul className="space-y-2">
+                {mine.length === 0 && past.length === 0 && <li className="text-sm text-ash">아직 없다.</li>}
+                {/* 이번 판에서 내가 얻은 단서, 그리고 지난 판에서 노트에 남은 단서 */}
+                {mine.map((c) => (
+                  <li key={c.id} className="font-serif-kr text-sm leading-7 text-glow">
+                    ◆ {c.text}
+                  </li>
+                ))}
+                {past.map((f) => (
+                  <li key={f.id} className="font-serif-kr text-sm leading-7 text-ash">
                     ◆ {f.text}
+                    <span className="ml-1.5 font-sans text-xs">(지난 판)</span>
                   </li>
                 ))}
               </ul>
@@ -201,7 +209,7 @@ export function ScenarioDrawer({
 
           {tab === 'journal' && (
             <ul className="space-y-4">
-              {journal.length === 0 && <li className="text-sm text-ash">아직 기록이 없다.</li>}
+              {journal.length === 0 && <li className="text-sm text-ash">아직 없다.</li>}
               {[...journal].reverse().map((j) => (
                 <li key={j.key}>
                   <p className="text-xs text-ash">

@@ -1,6 +1,7 @@
 // 시나리오 결과 화면: 투표·조합·개인 행동의 결과를 단계별로 보여 준다.
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ScenarioClient } from '../client.ts'
+import { playSfx, useFx } from '../fx.tsx'
 import { Appear, Beats, beatSteps, splitBeats, useAdvanceKey, useSequence, useSteps } from '../Narration.tsx'
 import type { Change } from '../../scenario/state.ts'
 import type { ResultView, ScenarioView } from '../../scenario/view.ts'
@@ -14,7 +15,7 @@ type Send = ScenarioClient['send']
 /** 결과가 화면에 일으키는 충격: 피해는 붉게, 단서는 금빛, 아이템은 초록 */
 export function impactOfChanges(changes: Change[], me: string): Impact {
   if (changes.some((c) => c.kind === 'hurt' || (c.kind === 'stat' && c.amount < 0))) return 'bad'
-  if (changes.some((c) => c.kind === 'fact' && c.playerId === me)) return 'fragment'
+  if (changes.some((c) => c.kind === 'fact')) return 'fragment'
   if (changes.some((c) => c.kind === 'item' && c.gained && c.playerId === me)) return 'item'
   return 'good'
 }
@@ -25,6 +26,72 @@ function useImpactOnce(reached: boolean, impact: Impact, onImpact: (i: Impact) =
     if (reached) onImpact(impact)
     // 도달 여부가 바뀔 때만 다시 평가한다 (한 번만 쏜다)
   }, [reached])
+}
+
+/**
+ * 동률 추첨 연출: 동률이던 선택지들 위로 불빛이 돌다가 점점 느려지며 뽑힌 하나에 멈춘다.
+ * 뽑힌 결과는 이미 엔진이 정해 두었고(시드), 화면은 그것을 향해 돌 뿐이다. 건너뛰면 바로 멈춘 모습이 된다.
+ */
+function TieDraw({ draw, active }: { draw: NonNullable<ResultView['draw']>; active: boolean }) {
+  const { speed } = useFx()
+  const n = draw.options.length
+  const target = Math.max(0, draw.options.indexOf(draw.chosen))
+  const [cursor, setCursor] = useState(target)
+  const [landed, setLanded] = useState(!active || speed === 0)
+
+  useEffect(() => {
+    if (!active || speed === 0) {
+      setCursor(target)
+      setLanded(true)
+      return
+    }
+    // 적어도 열네 칸은 돌고, 마지막 칸이 뽑힌 선택지가 되도록 몇 칸을 돌지 정한다
+    const ticks = target + n * Math.max(0, Math.ceil((14 - target) / n))
+    let step = 0
+    let timer: ReturnType<typeof setTimeout>
+    const run = () => {
+      setCursor(step % n)
+      playSfx('vote')
+      if (step >= ticks) {
+        setLanded(true)
+        return
+      }
+      const ratio = step / ticks
+      step += 1
+      timer = setTimeout(run, (70 + ratio ** 3 * 420) / speed)
+    }
+    run()
+    return () => clearTimeout(timer)
+    // 연출은 추첨 단계가 시작될 때 한 번만 돌고, 건너뛰면 멈춘 모습이 된다
+  }, [active, speed])
+
+  return (
+    <div>
+      <p className="text-xs tracking-widest text-amber">동률 — 추첨</p>
+      <ul className="mt-2 space-y-2">
+        {draw.options.map((text, i) => {
+          const on = i === cursor
+          return (
+            <li
+              key={i}
+              className={`rounded border px-3 py-2 font-serif-kr text-sm transition-colors duration-75 ${
+                landed && on
+                  ? 'border-gain/70 bg-gain/10 text-bone'
+                  : on
+                    ? 'border-amber/70 bg-amber/10 text-bone'
+                    : 'border-edge text-ash opacity-60'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <span>{text}</span>
+                {landed && on && <span className="shrink-0 font-sans text-xs text-gain">뽑혔다</span>}
+              </div>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
 }
 
 function PickList({ view, picks, options }: { view: ScenarioView; picks: Record<string, string>; options: ResultView['options'] }) {
@@ -71,13 +138,14 @@ export function ScenarioResultPanel({
   const { steps, at } = useSteps(
     [
       ['head', 0, 650],
+      ['draw', 0, result.draw ? 3200 : 0],
       ['who', 0, 700],
       ...beatSteps(mineBeats, [], 'm'),
       ...beatSteps(textBeats, [], 't'),
       ['hold', 0, hasNarration ? 800 : 0],
       ['chips', 0, 500],
     ],
-    [mineText, result.text],
+    [mineText, result.text, result.draw],
   )
   const seq = useSequence(steps)
   useAdvanceKey(seq, () => send({ type: 'ready' }))
@@ -100,11 +168,16 @@ export function ScenarioResultPanel({
     <section onClick={() => !seq.done && seq.skip()}>
       <Appear step={at.head} seq={seq}>
         <p className="text-xs tracking-widest text-ash">{label}</p>
-        {result.kind === 'vote' && result.choiceText && !result.forcedTie && (
+        {result.kind === 'vote' && result.choiceText && (!result.draw || seq.i > at.draw) && (
           <h2 className="mt-1 font-serif-kr text-lg text-fog">{result.choiceText}</h2>
         )}
-        {result.forcedTie && <p className="mt-1 text-xs text-amber">동률이라 방장의 표를 따랐다.</p>}
       </Appear>
+
+      {result.draw && (
+        <Appear step={at.draw} seq={seq} className="mt-3">
+          <TieDraw draw={result.draw} active={seq.i === at.draw} />
+        </Appear>
+      )}
 
       <Appear step={at.who} seq={seq} className="mt-3">
         {result.kind === 'vote' && (
@@ -137,7 +210,7 @@ export function ScenarioResultPanel({
 
       {mineBeats.length > 0 && (
         <div className={`mt-5 rounded border border-glow/30 bg-glow/5 p-4 ${seq.i < at.m0 ? 'invisible' : ''}`}>
-          <p className="text-xs tracking-widest text-glow">내가 본 것 · 나만 안다</p>
+          <p className="text-xs tracking-widest text-glow">내가 본 것</p>
           <Beats beats={mineBeats} at={at} seq={seq} prefix="m" className="mt-2 font-serif-kr leading-8" />
         </div>
       )}

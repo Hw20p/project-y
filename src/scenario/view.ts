@@ -1,5 +1,5 @@
 // 플레이어 한 명에게 보여 줄 시나리오 화면 상태. 서버는 `ScenarioGame` 전체가 아니라 이것만 각 클라이언트에 보낸다.
-// 다른 사람의 단서·비공개 발견은 여기서 걸러진다.
+// 단서(사실)는 얻은 사람의 이름과 함께 모두에게 보인다. 다른 사람의 아이템과 비공개 발견의 글(서술)은 여기서 걸러진다.
 import { actionState, currentNode, findStep, openVoteChoices, personalOptionState, soloChoiceState } from './game.ts'
 import { evalCond, evalText } from './logic.ts'
 import type { Change, PrivateResult, RunPhase, ScenarioGame, ScenarioResult } from './state.ts'
@@ -15,16 +15,28 @@ export interface DossierView {
   lockNote?: string
 }
 
-/** 조사 보드의 의문 하나 (내 화면 기준) */
+/** 알아낸 단서 하나: 누가 얻었는지 이름이 붙고, 파티 전원에게 보인다 */
+export interface ClueView {
+  id: string
+  text: string
+  /** 이번 판에서 이 단서를 얻은 사람들. 지난 판에서 알아낸 것(`old`)은 비어 있다. */
+  by: { id: string; name: string }[]
+  /** 지난 판에서 알아낸 것(단서 노트)이고 이번 판에는 아무도 모른다 */
+  old: boolean
+}
+
+/** 조사 보드의 의문 하나 */
 export interface BoardQuestionView {
   id: string
   /** 아직 아무도 관련 단서를 모르면 null (의문이 있다는 것도 모른다) */
   text: string | null
   solved: boolean
+  /** 지금 풀고 있는 의문인지 (과제를 하나씩 푸는 시나리오에서만) */
+  current: boolean
   /** 풀렸을 때만 */
   answer: string | null
-  /** 내가 아는 관련 단서. `old`는 지난 판에서 알아낸 것(단서 노트)이다. */
-  clues: { id: string; text: string; old: boolean }[]
+  /** 이 의문과 관련해 파티 누구라도 알아낸 단서 (얻은 사람 이름 포함). `old`는 내 단서 노트에만 있는 지난 판의 것이다. */
+  clues: ClueView[]
 }
 
 export interface BoardView {
@@ -53,6 +65,8 @@ export interface SceneChoiceView {
   pickerIds: string[]
   /** 분할 행동의 정원이 찼는지 */
   full: boolean
+  /** 분할 행동에 필요한 최소 인원 (둘이 함께 해야 하는 행동) */
+  min?: number
   /** 이 선택지가 주는 성장을 미리 알리는 짧은 표시 (예: "체력 +1", "정신력 +3", "부상 치료"). 개인 행동에서만 있다. */
   hints?: string[]
 }
@@ -73,8 +87,6 @@ export interface SceneView {
   title?: string
   text: string
   choices: SceneChoiceView[]
-  /** 투표가 모두 모였는데 동률이라 진행하지 못하고 있다 */
-  tie: boolean
   /** 내가 지금 고른 선택지·행동 */
   myChoiceId: string | null
   /** 개인 장면: 내가 혼자 진행 중인 단계 (아직 고르기 전이거나 끝났으면 null) */
@@ -124,6 +136,8 @@ export interface ScenarioView {
   runNo: number
   time: number
   clockLabel: string
+  /** 시계가 조명일 때만: 마감까지 조명이 몇 단계이고(`max`) 지금 몇 단계나 어두워졌는지(`level`) */
+  light: { max: number; level: number } | null
   phase: RunPhase
   me: { id: string; name: string; hurt: boolean; panic: boolean; stats: Stats; items: ItemDef[]; facts: HintDef[] }
   players: PlayerView[]
@@ -131,13 +145,15 @@ export interface ScenarioView {
   timeOfDay: { day: number; period: 'day' | 'night' } | null
   /** 정보 패널(대상 정보)용. 대상 자료는 내 단서 노트에 따라 열린다. */
   entity: EntityView
+  /** 이번 판에서 파티 누구라도 알아낸 단서 전부 (얻은 사람 이름 포함). 알아낸 순서대로. */
+  clues: ClueView[]
   /** 단서 노트: 지금까지 알아낸 사실 (지난 판 것까지) */
   notebook: HintDef[]
   /** 조사 보드 (시나리오에 있을 때만) */
   board: BoardView | null
   /** 아이템 id → 이름 (변화 칩에 "○○ 획득"을 쓰기 위함) */
   itemNames: Record<string, string>
-  /** 이 장면에 들어오며 적용된 변화: 지난 선택의 **여파**(`later`)와 이 장면의 진입 효과. 아이템·단서는 본인 것만 보인다. */
+  /** 이 장면에 들어오며 적용된 변화: 지난 선택의 **여파**(`later`)와 이 장면의 진입 효과. 아이템은 본인 것만, 단서는 모두의 것이 보인다. */
   aftermath: Change[]
   scene: SceneView | null
   result: ResultView | null
@@ -156,18 +172,17 @@ function growthHints(effects: Effect[] | undefined): string[] {
   return out
 }
 
-const BASE_SCENE = { choices: [], tie: false, myChoiceId: null, solo: null, mineDone: false, myLines: [] } satisfies Partial<SceneView>
+const BASE_SCENE = { choices: [], myChoiceId: null, solo: null, mineDone: false, myLines: [] } satisfies Partial<SceneView>
 
-/** 투표가 동률일 때 동률로 맞선 선택지들 (동률이 아니면 비어 있다). 무작위 추천은 이 중에서 고른다. */
-export function tiedChoiceIds(scene: SceneView | null): string[] {
-  if (!scene?.tie) return []
-  const top = Math.max(0, ...scene.choices.map((c) => c.pickerIds.length))
-  return scene.choices.filter((c) => c.pickerIds.length === top).map((c) => c.id)
+/** 분할 장면에서 함께할 사람이 더 필요한 행동들 (고른 사람이 있지만 최소 인원에 못 미친다). 있으면 장면이 진행되지 않는다. */
+export function needMoreChoiceIds(scene: SceneView | null): string[] {
+  if (scene?.kind !== 'split') return []
+  return scene.choices.filter((c) => c.min !== undefined && c.pickerIds.length > 0 && c.pickerIds.length < c.min).map((c) => c.id)
 }
 
 /** 변화 중 이 사람에게 보여 줄 것: 아이템·단서는 본인 것만, 나머지(스텟·부상·시간)는 모두에게 */
 function visibleTo(changes: Change[], playerId: string): Change[] {
-  return changes.filter((c) => (c.kind !== 'item' && c.kind !== 'fact') || c.playerId === playerId)
+  return changes.filter((c) => c.kind !== 'item' || c.playerId === playerId)
 }
 
 export function viewForScenario(sc: Scenario, g: ScenarioGame, playerId: string): ScenarioView {
@@ -184,9 +199,6 @@ export function viewForScenario(sc: Scenario, g: ScenarioGame, playerId: string)
   } else if (node.kind === 'vote' && run.phase === 'vote') {
     const open = openVoteChoices(g, node)
     const openIds = new Set(open.map((c) => c.id))
-    const counts = open.map((c) => run.players.filter((p) => run.votes[p.id] === c.id).length)
-    const top = Math.max(0, ...counts)
-    const allVoted = run.players.every((p) => run.votes[p.id])
     scene = {
       ...BASE_SCENE,
       kind: 'vote',
@@ -197,7 +209,6 @@ export function viewForScenario(sc: Scenario, g: ScenarioGame, playerId: string)
         if (openIds.has(c.id)) return [{ id: c.id, text: evalText(c.text, ctx), pickerIds, full: false }]
         return c.locked ? [{ id: c.id, text: evalText(c.text, ctx), locked: c.locked, pickerIds: [], full: false }] : []
       }),
-      tie: allVoted && top > 0 && counts.filter((n) => n === top).length > 1,
       myChoiceId: run.votes[playerId] ?? null,
     }
   } else if (node.kind === 'split' && run.phase === 'split') {
@@ -210,12 +221,12 @@ export function viewForScenario(sc: Scenario, g: ScenarioGame, playerId: string)
         const st = actionState(g, a, playerId)
         const pickerIds = run.players.filter((p) => run.picks[p.id] === a.id).map((p) => p.id)
         const full = a.max !== undefined && pickerIds.length >= a.max
-        if (st.open) return [{ id: a.id, text: evalText(a.text, ctx), pickerIds, full }]
+        const min = a.min
+        if (st.open) return [{ id: a.id, text: evalText(a.text, ctx), pickerIds, full, min }]
         // 내가 지금 이 행동을 하고 있다면(정원이 찬 경우 포함) 잠긴 것이 아니라 내 선택이다
-        if (run.picks[playerId] === a.id) return [{ id: a.id, text: evalText(a.text, ctx), pickerIds, full }]
-        return st.reason ? [{ id: a.id, text: evalText(a.text, ctx), locked: st.reason, pickerIds, full }] : []
+        if (run.picks[playerId] === a.id) return [{ id: a.id, text: evalText(a.text, ctx), pickerIds, full, min }]
+        return st.reason ? [{ id: a.id, text: evalText(a.text, ctx), locked: st.reason, pickerIds, full, min }] : []
       }),
-      tie: false,
       myChoiceId: run.picks[playerId] ?? null,
     }
   }
@@ -259,16 +270,14 @@ export function viewForScenario(sc: Scenario, g: ScenarioGame, playerId: string)
   let result: ResultView | null = null
   if (run.phase === 'result' && run.result) {
     const { private: priv, changes, ...rest } = run.result
-    // 부상·치료·스텟은 파티원 줄에 보이는 사실이라 누가 겪었든 모두에게 보인다. 아이템·단서는 본인만 안다.
-    const visible = (c: Change) => c.kind === 'hurt' || c.kind === 'heal' || c.kind === 'stat'
+    // 부상·치료·스텟은 파티원 줄에 보이는 사실이고, 단서는 얻은 사람의 이름과 함께 공개되므로 누가 겪었든 모두에게 보인다.
+    // 아이템 획득과 비공개 발견의 글만 본인에게 보인다.
+    const visible = (c: Change) => c.kind === 'hurt' || c.kind === 'heal' || c.kind === 'stat' || c.kind === 'fact'
     const mine = priv[playerId]
     result = {
       ...rest,
       mine: mine ? { text: mine.text, changes: mine.changes.filter((c) => !visible(c)) } : null,
-      changes: [
-        ...changes.filter((c) => c.kind !== 'fact' || c.playerId === playerId),
-        ...Object.values(priv).flatMap((p) => p.changes.filter(visible)),
-      ],
+      changes: [...changes, ...Object.values(priv).flatMap((p) => p.changes.filter(visible))],
     }
   }
 
@@ -291,35 +300,47 @@ export function viewForScenario(sc: Scenario, g: ScenarioGame, playerId: string)
     .map((id) => sc.facts.find((f) => f.id === id))
     .filter((f): f is HintDef => !!f && !f.run)
 
+  // ───── 단서: 파티 누구라도 알아낸 것은 얻은 사람의 이름과 함께 모두에게 보인다
+  const foundBy = new Map<string, { id: string; name: string }[]>() // 알아낸 순서대로 (사람 순서, 사람마다 얻은 순서)
+  for (const p of run.players) {
+    for (const id of p.facts) {
+      const list = foundBy.get(id) ?? []
+      list.push({ id: p.id, name: p.name })
+      foundBy.set(id, list)
+    }
+  }
+  const clueOf = (id: string, old: boolean): ClueView | null => {
+    const f = sc.facts.find((x) => x.id === id)
+    return f ? { id, text: f.text, by: old ? [] : (foundBy.get(id) ?? []), old } : null
+  }
+  const nonNull = (c: ClueView | null): c is ClueView => !!c
+  const clues = [...foundBy.keys()].map((id) => clueOf(id, false)).filter(nonNull)
+
   // ───── 조사 보드
   const board: BoardView | null = sc.board
     ? {
         goal: sc.board.goal,
         questions: sc.board.questions.map((q): BoardQuestionView => {
-          const mine = me.facts.filter((id) => q.facts.includes(id))
-          const old = book.filter((id) => q.facts.includes(id) && !mine.includes(id) && !sc.facts.find((f) => f.id === id)?.run)
+          const shared = q.facts.filter((id) => foundBy.has(id))
+          const old = book.filter((id) => q.facts.includes(id) && !foundBy.has(id) && !sc.facts.find((f) => f.id === id)?.run)
           const solved = evalCond(q.solved, ctx)
-          const partyKnows = run.players.some((p) => p.facts.some((id) => q.facts.includes(id)))
-          const revealed = solved || partyKnows || old.length > 0
-          const clueOf = (id: string, isOld: boolean) => {
-            const f = sc.facts.find((x) => x.id === id)
-            return f ? { id, text: f.text, old: isOld } : null
-          }
+          const open = !!q.open && evalCond(q.open, ctx)
+          const revealed = solved || open || shared.length > 0 || old.length > 0
           return {
             id: q.id,
             text: revealed ? q.text : null,
             solved,
+            current: open && !solved,
             answer: solved ? evalText(q.answer, ctx) : null,
-            clues: [...mine.map((id) => clueOf(id, false)), ...old.map((id) => clueOf(id, true))].filter(
-              (c): c is { id: string; text: string; old: boolean } => !!c,
-            ),
+            clues: [...shared.map((id) => clueOf(id, false)), ...old.map((id) => clueOf(id, true))].filter(nonNull),
           }
         }),
       }
     : null
+  // 대상 자료는 파티 누구라도 그 단서를 알아냈거나 내 단서 노트에 있으면 열린다
   const dossier: DossierView[] = (sc.dossier ?? []).map((d) => {
-    if (!d.unlock?.hint || book.includes(d.unlock.hint)) return { id: d.id, title: d.title, lines: d.lines }
-    return { id: d.id, title: d.title, lines: null, lockNote: '관련된 단서를 찾으면 읽을 수 있다' }
+    if (!d.unlock?.hint || book.includes(d.unlock.hint) || foundBy.has(d.unlock.hint)) return { id: d.id, title: d.title, lines: d.lines }
+    return { id: d.id, title: d.title, lines: null, lockNote: '아직 잠겨 있다' }
   })
 
   // ───── 며칠째 낮/밤: 지나온 장면의 시간대를 따라가며, 밤에서 낮으로 넘어갈 때 하루가 지난다
@@ -343,7 +364,14 @@ export function viewForScenario(sc: Scenario, g: ScenarioGame, playerId: string)
     scenario: { id: sc.id, code: sc.code, name: sc.name, type: sc.type },
     runNo: g.runNo,
     time: run.time,
-    clockLabel: clock[Math.min(run.time, clock.length - 1)] ?? '',
+    clockLabel: clock[Math.min(Math.floor(run.time / (sc.clock.per ?? 1)), clock.length - 1)] ?? '',
+    light:
+      sc.clock.light && sc.deadline
+        ? {
+            max: Math.ceil(sc.deadline.time / (sc.clock.per ?? 1)),
+            level: Math.min(Math.floor(run.time / (sc.clock.per ?? 1)), Math.ceil(sc.deadline.time / (sc.clock.per ?? 1))),
+          }
+        : null,
     timeOfDay,
     phase: run.phase,
     me: {
@@ -391,6 +419,7 @@ export function viewForScenario(sc: Scenario, g: ScenarioGame, playerId: string)
       manual: sc.manual,
       dossier,
     },
+    clues,
     notebook,
     board,
     itemNames: Object.fromEntries(sc.items.map((i) => [i.id, i.name])),

@@ -147,6 +147,8 @@ function macrosOf(sc: Scenario, g: ScenarioGame): Macro[] {
     const counts = new Map<string, number>()
     const walk = (i: number): void => {
       if (i === pickers.length) {
+        // 인원이 모자란 행동이 남는 조합은 장면이 진행되지 않으므로 한 걸음이 아니다
+        if (node.actions.some((a) => a.min !== undefined && (counts.get(a.id) ?? 0) > 0 && (counts.get(a.id) ?? 0) < a.min)) return
         out.push({
           label: `${title}: ${chosen.map((c) => `${c.name}→${c.text}`).join(', ')}`,
           actions: chosen.map((c): ScenarioAction => ({ type: 'pick', playerId: c.who, actionId: c.action })),

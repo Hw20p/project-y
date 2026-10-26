@@ -4,10 +4,11 @@ import type { PartyMember } from './explore.ts'
 import { playableScenarios } from '../content/scenarios/index.ts'
 import { demo } from './fixtures/demo.ts'
 import { night } from './fixtures/night.ts'
+import { tasksSmall } from './fixtures/tasks.ts'
 import { ARCHETYPES } from './stats.ts'
 import type { Scenario } from './types.ts'
 
-export const scenarios: Scenario[] = [...playableScenarios, demo, night]
+export const scenarios: Scenario[] = [...playableScenarios, demo, night, tasksSmall]
 
 /** 탐색·시험용 파티: n명, 입사 배경을 돌아가며 준다 */
 export function partyOf(n: number): PartyMember[] {

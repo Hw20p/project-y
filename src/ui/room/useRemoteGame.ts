@@ -227,7 +227,6 @@ export function useRemoteGame(init: RemoteInit): RemoteRoom {
 
   // 아래 함수들은 모양이 바뀌면 서술 연출의 효과가 다시 돌기 때문에 항상 같은 것을 돌려준다
   const setReading = useCallback((reading: boolean) => send({ t: 'reading', reading }), [send])
-  const suggest = useCallback(() => send({ t: 'suggest' }), [send])
   const force = useCallback(() => send({ t: 'force' }), [send])
   const rematch = useCallback(() => send({ t: 'rematch' }), [send])
 
@@ -242,8 +241,6 @@ export function useRemoteGame(init: RemoteInit): RemoteRoom {
       send: sendScenario,
       reading: sstate.reading,
       setReading,
-      suggestion: sstate.suggestion,
-      suggest,
       online: sstate.online,
       roomCode: sstate.code,
       isHost,
@@ -253,7 +250,7 @@ export function useRemoteGame(init: RemoteInit): RemoteRoom {
       retry: isHost ? retry : undefined,
       rematch: isHost ? rematch : undefined,
     }
-  }, [sstate, sendScenario, setReading, suggest, force, retry, rematch, reconnecting])
+  }, [sstate, sendScenario, setReading, force, retry, rematch, reconnecting])
 
   return { status, error, notice, lobby, scenario, start, setMode, setArchetype, leave }
 }

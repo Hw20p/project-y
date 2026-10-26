@@ -4,7 +4,7 @@ import type { ScenarioClient } from '../client.ts'
 import { playSfx } from '../fx.tsx'
 import { useMemo } from 'react'
 import { Appear, Beats, beatSteps, splitBeats, useAdvanceKey, useSequence, useSteps } from '../Narration.tsx'
-import type { SceneChoiceView, ScenarioView } from '../../scenario/view.ts'
+import { needMoreChoiceIds, type SceneChoiceView, type ScenarioView } from '../../scenario/view.ts'
 import { Changes, Continue, NewFacts, SkipHint } from './parts.tsx'
 
 type Send = ScenarioClient['send']
@@ -18,7 +18,7 @@ const KIND_LABEL = {
 
 /** 지난 선택의 여파(`later`와 진입 효과)를 장면 위에 보인다 */
 function Aftermath({ view }: { view: ScenarioView }) {
-  const shown = view.aftermath.filter((c) => c.kind !== 'fact' || c.playerId === view.me.id)
+  const shown = view.aftermath
   if (shown.length === 0) return null
   return (
     <div className="mb-4 rounded border border-edge/70 bg-panel/40 px-3 py-2">
@@ -78,19 +78,7 @@ export function StoryScene({ view, send }: { view: ScenarioView; send: Send }) {
 
 // ───────────────────────── 추리(투표) · 조합(분할) ─────────────────────────
 
-export function ChoiceScene({
-  view,
-  send,
-  reading,
-  suggestion,
-  suggest,
-}: {
-  view: ScenarioView
-  send: Send
-  reading: string[]
-  suggestion: string | null
-  suggest: () => void
-}) {
+export function ChoiceScene({ view, send, reading }: { view: ScenarioView; send: Send; reading: string[] }) {
   void reading
   const scene = view.scene!
   const isVote = scene.kind === 'vote'
@@ -118,6 +106,7 @@ export function ChoiceScene({
   const top = Math.max(0, ...scene.choices.map((c) => c.pickerIds.length))
   const leaders = top > 0 ? scene.choices.filter((c) => c.pickerIds.length === top) : []
   const actedCount = view.players.filter((p) => p.acted).length
+  const needMore = needMoreChoiceIds(scene)
 
   return (
     <section onClick={() => !seq.done && seq.skip()}>
@@ -136,7 +125,6 @@ export function ChoiceScene({
           {scene.choices.map((c, i) => {
             const mine = scene.myChoiceId === c.id
             const leading = isVote && multi && leaders.length === 1 && leaders[0].id === c.id
-            const suggested = scene.tie && suggestion === c.id
             const disabled = !!c.locked || blocked || (c.full && !mine)
             return (
               <li key={c.id} className="rise" style={{ animationDelay: `${i * 80}ms` }}>
@@ -149,11 +137,9 @@ export function ChoiceScene({
                       ? 'border-glow/70 bg-glow/10'
                       : c.locked
                         ? 'border-edge/60 bg-transparent'
-                        : suggested
-                          ? 'border-amber/60 bg-amber/5'
-                          : leading
-                            ? 'border-amber/40 bg-panel'
-                            : 'border-edge bg-panel/60 hover:border-fog/50 hover:bg-panel'
+                        : leading
+                          ? 'border-amber/40 bg-panel'
+                          : 'border-edge bg-panel/60 hover:border-fog/50 hover:bg-panel'
                   } disabled:cursor-default ${c.locked ? 'opacity-60' : disabled ? 'opacity-50' : ''}`}
                 >
                   <span className="flex gap-3">
@@ -162,6 +148,11 @@ export function ChoiceScene({
                       <span className="font-serif-kr">{c.text}</span>
                       {c.locked && <span className="mt-1 block text-xs text-ash">🔒 {c.locked}</span>}
                       {!c.locked && c.full && !mine && <span className="mt-1 block text-xs text-ash">정원이 찼다</span>}
+                      {c.min !== undefined && (
+                        <span className={`mt-1 block text-xs ${needMore.includes(c.id) ? 'text-amber' : 'text-ash'}`}>
+                          {c.min}명이 함께해야 한다 ({c.pickerIds.length}/{c.min})
+                        </span>
+                      )}
                       {c.pickerIds.length > 0 && (
                         <span className="mt-2 flex flex-wrap gap-1.5">
                           {c.pickerIds.map((id) => (
@@ -178,7 +169,6 @@ export function ChoiceScene({
                       )}
                     </span>
                     {leading && <span className="text-xs text-amber">다수</span>}
-                    {suggested && <span className="pop text-xs text-amber">추천</span>}
                   </span>
                 </button>
               </li>
@@ -186,24 +176,13 @@ export function ChoiceScene({
           })}
         </ul>
 
-        {scene.tie && (
-          <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
-            <button
-              type="button"
-              onClick={suggest}
-              className="rounded border border-amber/50 px-3 py-1.5 text-xs text-amber transition hover:bg-amber/10"
-            >
-              {suggestion ? '다시 추천받기' : '무작위로 추천받기'}
-            </button>
-            <span className="text-xs text-ash">동률인 선택지 중 하나를 골라 준다. 추천은 참고일 뿐, 각자 다시 골라야 진행된다.</span>
-          </div>
-        )}
-
         <p className="mt-4 text-xs text-ash">
-          {scene.tie && (
-            <span className="mr-2 text-amber">동률이다 — 의논해서 한쪽으로 모아야 진행된다 (방장은 강제로 진행할 수 있다).</span>
+          {needMore.length > 0 && (
+            <span className="mr-2 text-amber">
+              함께할 사람이 더 필요한 행동이 있다 — 의논해서 사람을 모으거나 다른 행동으로 바꿔야 진행된다 (방장은 강제로 진행할 수 있다).
+            </span>
           )}
-          {!scene.tie &&
+          {needMore.length === 0 &&
             multi &&
             (scene.myChoiceId
               ? `다른 사람을 기다리는 중 (${actedCount}/${view.players.length}) · 다른 선택지를 누르면 바꾸고, 같은 것을 다시 누르면 취소된다`

@@ -274,7 +274,7 @@ export function validateScenario(sc: Scenario): ValidationReport {
       const actions = new Set(n.actions.map((a) => a.id))
       if (n.actions.length < 2) at(where, '행동이 2개 이상 필요함')
       unique(where, n.actions.map((a) => a.id))
-      if (!n.actions.some((a) => !a.when && !a.needsHealthy && a.max === undefined)) {
+      if (!n.actions.some((a) => !a.when && !a.needsHealthy && a.max === undefined && a.min === undefined)) {
         at(where, '언제나 고를 수 있는 행동이 없음 (모두 잠기거나 정원이 차면 게임이 멈춘다)')
       }
       for (const a of n.actions) {
@@ -282,6 +282,11 @@ export function validateScenario(sc: Scenario): ValidationReport {
         text(a.text, SCENE_TEXT, `${w} 문장`)
         if (a.when) cond(a.when, ACTION_WHEN, `${w} 조건`)
         if (a.max !== undefined && a.max < 1) at(w, 'max는 1 이상이어야 함')
+        if (a.min !== undefined) {
+          if (!Number.isInteger(a.min) || a.min < 2) at(w, 'min은 2 이상의 정수여야 함')
+          else if (a.max !== undefined && a.min > a.max) at(w, 'min이 max보다 큼 (정원이 최소 인원보다 적으면 아무도 못 한다)')
+          else if (a.min > (sc.party?.max ?? 8)) at(w, 'min이 시나리오의 최대 인원보다 큼')
+        }
         if (a.calming) hasCalming = true
       }
       for (const f of n.private ?? []) {
@@ -310,6 +315,7 @@ export function validateScenario(sc: Scenario): ValidationReport {
 
   // ───── 시나리오 전체
   if (sc.clock.labels.length === 0) at('시계', '이름이 하나 이상 필요함')
+  if (sc.clock.per !== undefined && (!Number.isInteger(sc.clock.per) || sc.clock.per < 1)) at('시계', 'per는 1 이상의 정수여야 함')
   if (!nodeIds.has(sc.start)) at('시작', `없는 장면 "${sc.start}"`)
   for (const v of sc.vars ?? []) if (v.pick.length < 2) at(`무작위 값 ${v.id}`, '후보가 2개 이상이어야 의미가 있음')
 
@@ -336,6 +342,7 @@ export function validateScenario(sc: Scenario): ValidationReport {
     if (q.facts.length === 0) at(where, '관련 사실이 없으면 보드에 단서가 붙지 않음')
     for (const f of q.facts) if (!factIds.has(f)) at(where, `알 수 없는 사실 "${f}"`)
     cond(q.solved, PARTY, where)
+    if (q.open) cond(q.open, PARTY, where)
     text(q.answer, PARTY, where)
   }
 

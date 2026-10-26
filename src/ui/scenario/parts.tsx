@@ -25,7 +25,7 @@ export function ChangeChip({ change, view }: { change: Change; view: ScenarioVie
   const name = (id: string) => view.players.find((p) => p.id === id)?.name ?? id
   switch (change.kind) {
     case 'time':
-      return <Chip tone="amber">시간이 흘렀다 ({view.clockLabel})</Chip>
+      return <Chip tone="amber">{view.light ? '하루가 지났다' : '시간이 흘렀다'} ({view.clockLabel})</Chip>
     case 'stat':
       return (
         <Chip tone={change.amount > 0 ? 'gain' : 'loss'}>
@@ -60,20 +60,61 @@ export function Changes({ changes, view }: { changes: Change[]; view: ScenarioVi
   )
 }
 
-/** 새로 알아낸 단서 (내 것만 보인다) */
+/**
+ * 시계 표시. 시계가 조명인 시나리오는 남은 조명을 막대로 보이고(어두워질수록 붉어지고, 거의 꺼지면 깜빡인다) 상태를 말로 적는다.
+ * 아니면 시계 이름만 보인다.
+ */
+export function LightMeter({ view }: { view: ScenarioView }) {
+  if (!view.light) {
+    return <span className="rounded border border-amber/30 px-2 py-0.5 text-amber">{view.clockLabel}</span>
+  }
+  const { max } = view.light
+  const left = Math.max(0, max - view.light.level)
+  const low = left <= 2
+  return (
+    <span
+      className={`inline-flex items-center gap-2 rounded border px-2 py-0.5 ${low ? 'border-loss/40 text-loss' : 'border-amber/30 text-amber'}`}
+      title={`남은 조명 ${left}/${max}`}
+    >
+      <span className="flex gap-0.5" aria-hidden>
+        {Array.from({ length: max }, (_, i) => (
+          <span key={i} className={`h-3 w-1.5 rounded-sm ${i < left ? (low ? 'bg-loss' : 'bg-amber') : 'bg-edge'}`} />
+        ))}
+      </span>
+      <span className={left <= 1 ? 'fx-flicker' : ''}>{view.clockLabel}</span>
+    </span>
+  )
+}
+
+/** 단서를 얻은 사람들의 이름 (전원이면 "모두", 나는 "(나)"가 붙는다) */
+export function clueWho(by: { id: string; name: string }[], view: ScenarioView): string {
+  if (by.length > 1 && by.length === view.players.length) return '모두'
+  return by.map((b) => (b.id === view.me.id ? `${b.name}(나)` : b.name)).join(', ')
+}
+
+/** 새로 알아낸 단서: 파티 누구의 것이든 얻은 사람의 이름과 함께 모두에게 보인다 (같은 단서를 여럿이 알게 되면 하나로 묶는다) */
 export function NewFacts({ changes, view }: { changes: Change[]; view: ScenarioView }) {
-  const facts = changes.flatMap((c) => (c.kind === 'fact' && c.playerId === view.me.id ? [c.id] : []))
-  if (facts.length === 0) return null
+  const found = new Map<string, string[]>()
+  for (const c of changes) if (c.kind === 'fact') found.set(c.id, [...(found.get(c.id) ?? []), c.playerId])
+  if (found.size === 0) return null
+  const nameOf = (id: string) => view.players.find((p) => p.id === id)?.name ?? id
   return (
     <>
-      {facts.map((id) => (
-        <p
-          key={id}
-          className="mt-3 rounded border border-glow/30 bg-glow/5 px-3 py-2 font-serif-kr text-sm text-glow"
-        >
-          ◆ 새 단서 (당신만 안다) — {view.notebook.find((f) => f.id === id)?.text ?? id}
-        </p>
-      ))}
+      {[...found].map(([id, who]) => {
+        const text = view.clues.find((c) => c.id === id)?.text ?? view.notebook.find((f) => f.id === id)?.text ?? id
+        const mine = who.includes(view.me.id)
+        return (
+          <p
+            key={id}
+            className={`mt-3 rounded border px-3 py-2 font-serif-kr text-sm ${
+              mine ? 'border-glow/30 bg-glow/5 text-glow' : 'border-edge bg-panel/40 text-fog'
+            }`}
+          >
+            ◆ 새 단서 — {text}
+            <span className="ml-2 font-sans text-xs text-ash">{clueWho(who.map((pid) => ({ id: pid, name: nameOf(pid) })), view)}</span>
+          </p>
+        )
+      })}
     </>
   )
 }

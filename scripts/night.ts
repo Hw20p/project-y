@@ -89,7 +89,7 @@ const startNight = (players = crew, seed = 1) =>
   // 강제 진행: 안 고른 사람을 기다리지 않고, 이미 고른 것만 적용한다
   let f = startNight()
   f = act(f, { type: 'pick', playerId: 'a', actionId: 'train' })
-  f = act(f, { type: 'force', tieBreak: 'a' })
+  f = act(f, { type: 'force' })
   assert.equal(f.run.players[0].stats.body, 2, '고른 것은 적용된다')
   assert.equal(f.run.players[1].stats.body, 1, '안 고른 사람은 아무것도 하지 않는다')
   console.log('통과: 개인 장면(모두 고른 뒤 적용·선택 공개·취소·스텟 기준선)')
@@ -278,7 +278,7 @@ const startNight = (players = crew, seed = 1) =>
         }
       } else break
       g = act(g, a)
-      if (steps % 41 === 0 && g.run.phase !== 'ended') g = act(g, { type: 'force', tieBreak: roster[0].id })
+      if (steps % 41 === 0 && g.run.phase !== 'ended') g = act(g, { type: 'force' })
     }
     assert.equal(g.run.phase, 'ended', `시드 ${seed}(${n}명)가 ${steps}번 안에 끝나지 않음`)
     endings.set(g.run.endingId!, (endings.get(g.run.endingId!) ?? 0) + 1)

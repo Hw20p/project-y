@@ -114,8 +114,6 @@ try {
         send: () => {},
         reading: ['p2'],
         setReading: () => {},
-        suggestion: null,
-        suggest: () => {},
         online: { p1: true, p2: false },
         roomCode: 'ABCD',
         isHost: id === 'p1',
@@ -157,7 +155,7 @@ try {
         }
         if (!s2.myChoiceId && !s2.mineDone) {
           // 개인 단계가 이어지는 선택지를 우선 골라 본다 (엘리베이터·계단)
-          const c = s2.choices.find((x) => !x.locked && (x.id === 'elevator-peek' || x.id === 'stairs-peek')) ?? s2.choices.find((x) => !x.locked)
+          const c = s2.choices.find((x) => !x.locked && (x.id === 'near-light' || x.id === 'near-desk')) ?? s2.choices.find((x) => !x.locked)
           return c ? { type: 'pick', playerId: id, actionId: c.id } : null
         }
       }
@@ -176,7 +174,7 @@ try {
           renderFor('p1')
         }
       }
-      if (!moved) act({ type: 'force', tieBreak: 'p1' })
+      if (!moved) act({ type: 'force' })
     }
     assert.equal(g.run.phase, 'ended')
     renderFor('p1')
@@ -193,8 +191,6 @@ try {
         send: () => {},
         reading: [],
         setReading: () => {},
-        suggestion: null,
-        suggest: () => {},
         online: {},
         roomCode: 'ABCD',
         isHost: true,

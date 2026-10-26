@@ -12,7 +12,7 @@ import { demo } from '../src/scenario/fixtures/demo.ts'
 import type { ScenarioGame } from '../src/scenario/state.ts'
 import type { Scenario } from '../src/scenario/types.ts'
 import { validateScenario } from '../src/scenario/validate.ts'
-import { tiedChoiceIds, viewForScenario } from '../src/scenario/view.ts'
+import { viewForScenario } from '../src/scenario/view.ts'
 
 const two = [
   { id: 'a', name: '가' },
@@ -115,11 +115,14 @@ function seedWithCode(code: string): number {
   g = pick(pick(g, 'a', 'read-note'), 'b', 'search-room')
   const ra = viewForScenario(demo, g, 'a').result!
   assert.match(ra.mine!.text, /파랑/, '메모의 값이 이번 판의 무작위 값으로 바뀐다')
-  assert.ok(ra.mine!.changes.some((c) => c.kind === 'fact' && c.playerId === 'a'), '내 단서 획득은 내 결과에 보인다')
+  assert.ok(ra.changes.some((c) => c.kind === 'fact' && c.playerId === 'a'), '단서 획득은 모두에게 보이는 변화로 들어간다 (누가 얻었는지 함께)')
+  assert.ok(!ra.mine!.changes.some((c) => c.kind === 'fact'), '단서는 개인 변화에 중복으로 들어가지 않는다')
+  assert.deepEqual(viewForScenario(demo, g, 'a').clues.map((c) => [c.id, c.by.map((b) => b.id)]), [['note', ['a']]], '단서 목록에 얻은 사람이 붙는다')
   assert.ok(ra.changes.some((c) => c.kind === 'hurt' && c.playerId === 'b'), '남의 부상은 모두에게 보인다')
   const rbView = viewForScenario(demo, g, 'b').result!
   assert.ok(!rbView.mine!.changes.some((c) => c.kind === 'hurt'), '내 부상은 공용 변화로만 보인다 (중복 없음)')
-  assert.ok(![...rbView.changes, ...rbView.mine!.changes].some((c) => c.kind === 'fact'), '남의 단서 획득은 보이지 않는다')
+  assert.ok(rbView.changes.some((c) => c.kind === 'fact' && c.playerId === 'a'), '남의 단서 획득도 모두에게 보인다')
+  assert.deepEqual(viewForScenario(demo, g, 'b').clues.map((c) => [c.id, c.by.map((x) => x.id)]), [['note', ['a']]], '다른 사람이 얻은 단서도 b의 단서 목록에 이름과 함께 있다')
   assert.ok(rbView.changes.some((c) => c.kind === 'hurt' && c.playerId === 'b'), '부상은 모두에게 보인다')
   assert.ok(!JSON.stringify(rbView).includes('파랑'), '남의 비공개 글은 전달되지 않는다')
   assert.deepEqual(g.notebooks.a, ['note'])
@@ -129,9 +132,9 @@ function seedWithCode(code: string): number {
   assert.equal(g.run.nodeId, 'door')
   assert.equal(g.run.time, 2)
 
-  // 단서 노트와 대상 자료: a만 메모 자료가 열린다
+  // 단서 노트와 대상 자료: 파티 누구라도 알아낸 단서의 자료는 모두에게 열린다 (노트는 얻은 사람 것만 남는다)
   assert.ok(viewForScenario(demo, g, 'a').entity.dossier.find((d) => d.id === 'note')!.lines)
-  assert.equal(viewForScenario(demo, g, 'b').entity.dossier.find((d) => d.id === 'note')!.lines, null)
+  assert.ok(viewForScenario(demo, g, 'b').entity.dossier.find((d) => d.id === 'note')!.lines)
   assert.equal(viewForScenario(demo, g, 'a').notebook[0].id, 'note')
   console.log('통과: 분할 장면(정원·비공개 발견·조합·부상·단서 노트)')
 }
@@ -150,7 +153,7 @@ function seedWithCode(code: string): number {
   console.log('통과: 부상 제한')
 }
 
-// 6) 투표: 동률이면 진행하지 않고, 강제 진행은 방장 표를 따른다. 결과는 무작위 값으로 갈린다.
+// 6) 투표: 동률이면 시드로 하나가 뽑힌다 (같은 판·같은 표면 같은 결과). 결과는 무작위 값으로 갈린다.
 {
   const walkToDoor = (seed: number): ScenarioGame => {
     let g = readyAll(createScenarioGame(demo, { seed, players: two }))
@@ -160,29 +163,42 @@ function seedWithCode(code: string): number {
   }
 
   const blueSeed = seedWithCode('파랑')
-  let g = walkToDoor(blueSeed)
+  const g0 = walkToDoor(blueSeed)
   // b는 열쇠가 있어서 잠긴 선택지가 열려 있다
-  assert.ok(openVoteChoices(g, currentNode(demo, g) as never).some((c) => c.id === 'use-key'))
-  g = act(g, { type: 'vote', playerId: 'a', choiceId: 'red' })
+  assert.ok(openVoteChoices(g0, currentNode(demo, g0) as never).some((c) => c.id === 'use-key'))
+  const g = act(g0, { type: 'vote', playerId: 'a', choiceId: 'red' })
   assert.equal(g.run.phase, 'vote', '한 명만 골랐으면 진행하지 않는다')
-  g = act(g, { type: 'vote', playerId: 'b', choiceId: 'blue' })
-  assert.equal(g.run.phase, 'vote', '동률이면 진행하지 않는다')
-  assert.equal(viewForScenario(demo, g, 'a').scene!.tie, true)
-  assert.deepEqual(tiedChoiceIds(viewForScenario(demo, g, 'a').scene).sort(), ['blue', 'red'], '동률인 선택지만 추천 후보가 된다')
-  assert.deepEqual(tiedChoiceIds(viewForScenario(demo, walkToDoor(blueSeed), 'a').scene), [], '동률이 아니면 후보가 없다')
-  assert.deepEqual(viewForScenario(demo, g, 'b').scene!.choices.find((c) => c.id === 'blue')!.pickerIds, ['b'])
+  assert.deepEqual(viewForScenario(demo, g, 'b').scene!.choices.find((c) => c.id === 'red')!.pickerIds, ['a'])
 
-  // 한 명이 마음을 바꾸면 모아진다 → 정답(파랑)이라 정문으로 (엔딩, 진엔딩)
-  const solved = act(g, { type: 'vote', playerId: 'a', choiceId: 'blue' })
+  // 동률: 기다리지 않고 바로 추첨으로 하나가 뽑힌다 (결과 화면에 동률이던 선택지들과 뽑힌 것이 담긴다)
+  const tie = act(g, { type: 'vote', playerId: 'b', choiceId: 'blue' })
+  assert.equal(tie.run.phase, 'result', '동률이면 의논을 기다리지 않고 추첨한다')
+  const draw = viewForScenario(demo, tie, 'a').result!.draw
+  assert.ok(draw, '추첨 결과가 화면으로 전해진다')
+  assert.equal(draw.options.length, 2)
+  assert.ok(draw.options.includes(draw.chosen))
+  assert.equal(viewForScenario(demo, tie, 'a').result!.choiceText, draw.chosen, '뽑힌 선택지가 결과가 된다')
+  assert.deepEqual(viewForScenario(demo, tie, 'b').result!.draw, draw, '같은 추첨 결과가 모두에게 보인다')
+  // 같은 판·같은 표면 같은 결과다
+  assert.deepEqual(viewForScenario(demo, act(g, { type: 'vote', playerId: 'b', choiceId: 'blue' }), 'a').result!.draw, draw)
+  // 시드가 다르면 양쪽이 모두 나올 수 있다
+  const chosen = new Set<string>()
+  for (let seed = 1; seed < 80; seed++) {
+    const t = act(act(walkToDoor(seed), { type: 'vote', playerId: 'a', choiceId: 'red' }), { type: 'vote', playerId: 'b', choiceId: 'blue' })
+    chosen.add(viewForScenario(demo, t, 'a').result!.draw!.chosen)
+  }
+  assert.equal(chosen.size, 2, '동률의 두 쪽이 모두 뽑힐 수 있다')
+
+  // 표가 모이면 추첨 없이 그대로 정해진다 → 정답(파랑)이라 정문으로 (엔딩, 진엔딩)
+  const solved = act(act(walkToDoor(blueSeed), { type: 'vote', playerId: 'a', choiceId: 'blue' }), { type: 'vote', playerId: 'b', choiceId: 'blue' })
   assert.equal(solved.run.endingId, 'good')
+  assert.equal(viewForScenario(demo, solved, 'a').result, null)
   assert.equal(viewForScenario(demo, solved, 'a').ending!.tier, 'true')
   assert.equal(viewForScenario(demo, solved, 'a').ending!.first, true)
 
-  // 강제 진행: 방장(b)의 표가 이긴다
-  const forced = act(g, { type: 'force', tieBreak: 'b' })
-  assert.equal(forced.run.endingId, 'good')
-  const forcedA = act(g, { type: 'force', tieBreak: 'a' })
-  assert.equal(forcedA.run.nodeId, 'trap', '방장이 빨강이라 틀렸다')
+  // 강제 진행: 지금 있는 표(a의 빨강)만으로 정한다 — 틀려서 경보가 울린다
+  const forcedA = act(g, { type: 'force' })
+  assert.equal(forcedA.run.nodeId, 'trap', '빨강이 한 표였으니 빨강이다')
   assert.equal(forcedA.run.time, 2, '경보로 시간이 흘렀다')
 
   // 틀린 암호 → 경보로 시간이 흐르고, 두 번 틀려 마감(시계 3)에 닿으면 엔딩
@@ -263,8 +279,8 @@ function seedWithCode(code: string): number {
         a = { type: 'pick', playerId: p.id, actionId: node.actions[Math.floor(rnd() * node.actions.length)].id }
       } else break
       g = act(g, a)
-      // 가끔 막히면(동률 등) 강제 진행
-      if (steps % 37 === 0 && g.run.phase !== 'ended') g = act(g, { type: 'force', tieBreak: roster[0].id })
+      // 가끔 막히면(정원 등) 강제 진행
+      if (steps % 37 === 0 && g.run.phase !== 'ended') g = act(g, { type: 'force' })
     }
     assert.equal(g.run.phase, 'ended', `시드 ${seed}(${n}명)가 ${steps}번 안에 끝나지 않음`)
     ended++

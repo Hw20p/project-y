@@ -1,7 +1,7 @@
 // 시나리오 모드의 게임 화면: 상단(시계·판 번호·엔딩 진행)·파티(스텟)·장면·정보 패널.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { stripFx } from '../../scenario/fx.ts'
-import type { ScenarioView } from '../../scenario/view.ts'
+import { needMoreChoiceIds, type ScenarioView } from '../../scenario/view.ts'
 import { ReadingContext, type ScenarioClient } from '../client.ts'
 import { FxSettingsBar, playSfx } from '../fx.tsx'
 import { DistortContext } from '../Narration.tsx'
@@ -9,7 +9,7 @@ import { loadJournal, pruneJournals, saveJournal, type JournalEntry } from '../s
 import { BoardStrip } from './Board.tsx'
 import { ScenarioDrawer, type ScenarioTab } from './Drawer.tsx'
 import { ScenarioEnding } from './Ending.tsx'
-import { ScenarioParty } from './parts.tsx'
+import { LightMeter, ScenarioParty } from './parts.tsx'
 import { ScenarioResultPanel, type Impact } from './Results.tsx'
 import { ChoiceScene, PersonalScene, StoryScene } from './Scenes.tsx'
 
@@ -44,7 +44,7 @@ export function ScenarioScreen({
   /** 자리를 완전히 비우고 나가기 (엔딩 중에는 주지 않는다) */
   onLeave?: () => void
 }) {
-  const { view, send, reading, setReading, suggestion, suggest, online, roomCode, isHost, reconnecting, force, journalKey } = client
+  const { view, send, reading, setReading, online, roomCode, isHost, reconnecting, force, journalKey } = client
 
   // 지난 기록: 판마다 브라우저에 저장해 새로 고침해도 이어진다
   const [journal, setJournal] = useState<JournalEntry[]>(() => loadJournal(journalKey))
@@ -94,11 +94,22 @@ export function ScenarioScreen({
     return () => window.removeEventListener('keydown', onKey)
   }, [view.phase, view.board])
 
+  // 조명이 한 단계 어두워지는 순간에는 화면이 몇 번 깜빡인다 (처음 열 때나 새 판으로 시간이 되돌아갈 때는 깜빡이지 않는다)
+  const lightLevel = view.light?.level ?? 0
+  const lastLevel = useRef(lightLevel)
+  const [blink, setBlink] = useState(0)
+  useEffect(() => {
+    if (lightLevel > lastLevel.current) setBlink(Date.now())
+    lastLevel.current = lightLevel
+  }, [lightLevel])
+
   // 분위기: 가장 약한 사람의 정신력이 낮을수록 가장자리가 붉어진다
   const lowest = Math.min(...view.players.map((p) => p.stats.sanity))
   const danger = Math.min(1, Math.max(0, (4 - lowest) / 4))
 
   const ended = view.phase === 'ended'
+  // 조명이 어두워진 정도(0~1): 화면이 가라앉는 만큼 글자는 야광처럼 빛난다
+  const darkness = view.light && !ended ? Math.min(1, view.light.level / view.light.max) ** 0.9 : 0
   const night = view.timeOfDay?.period === 'night'
   const sceneKey = `${view.runNo}-${view.time}-${view.phase}-${view.scene?.title ?? ''}-${view.scene?.text.length ?? 0}`
   const resultKey = `${view.runNo}-${view.result?.nodeId}-${view.time}`
@@ -106,28 +117,37 @@ export function ScenarioScreen({
   const waiting =
     !ended &&
     view.players.length > 1 &&
-    view.players.some((p) => {
-      if (p.id === view.me.id || online[p.id] === false) return false
-      if (view.phase === 'story' || view.phase === 'result') return !p.ready
-      if (view.phase === 'personal') return p.progress !== 'done'
-      return !p.acted
-    })
+    (needMoreChoiceIds(view.scene).length > 0 || // 함께할 사람이 모자란 행동이 있어서 멈춘 경우
+      view.players.some((p) => {
+        if (p.id === view.me.id || online[p.id] === false) return false
+        if (view.phase === 'story' || view.phase === 'result') return !p.ready
+        if (view.phase === 'personal') return p.progress !== 'done'
+        return !p.acted
+      }))
 
   return (
     <ReadingContext value={setReading}>
      <DistortContext value={lowest <= 3}>
       {view.timeOfDay && <div className="night-tint" style={{ opacity: night && !ended ? 1 : 0 }} aria-hidden />}
       <div className="vignette" style={{ opacity: danger }} aria-hidden />
+      {view.light && !ended && (
+        // 조명이 어두워질수록 화면 가장자리부터 깊게 가라앉는다
+        <div className="light-dim" style={{ opacity: darkness }} aria-hidden />
+      )}
+      {blink > 0 && <div key={blink} className="light-blink" aria-hidden />}
       {impact && <div key={impact.id} className={`impact impact-${impact.kind}`} aria-hidden />}
 
-      <div className={`mx-auto max-w-2xl px-4 pb-16 pt-5 ${impact?.kind === 'death' ? 'shake' : ''}`}>
+      <div
+        className={`mx-auto max-w-2xl px-4 pb-16 pt-5 ${impact?.kind === 'death' ? 'shake' : ''} ${darkness > 0 ? 'light-glow' : ''}`}
+        style={darkness > 0 ? ({ '--glow': darkness } as React.CSSProperties) : undefined}
+      >
         <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           {!ended ? (
             <div className={`grid gap-1.5 sm:flex ${view.board ? 'grid-cols-3' : 'grid-cols-2'}`}>
               {(
                 [
                   ...(view.board ? ([['board', '조사 보드', 'Q', view.board.questions.filter((q) => q.solved).length]] as const) : []),
-                  ['clues', '단서·소지품', 'N', view.me.items.length + view.me.facts.length],
+                  ['clues', '단서·소지품', 'N', view.me.items.length + view.clues.length],
                   ['entity', '자료', 'I', 0],
                 ] as const
               ).map(([id, label, key, count]) => (
@@ -177,7 +197,7 @@ export function ScenarioScreen({
                     {view.timeOfDay.day}일째 {night ? '밤' : '낮'}
                   </span>
                 )}
-                <span className="rounded border border-amber/30 px-2 py-0.5 text-amber">{view.clockLabel}</span>
+                <LightMeter view={view} />
               </span>
               <span className="text-ash">
                 닿아 본 엔딩 {view.endings.reached.length}/{view.endings.total} · 단서 노트 {view.notebook.length}
@@ -195,7 +215,7 @@ export function ScenarioScreen({
             <button
               type="button"
               onClick={() => {
-                if (window.confirm('아직 안 끝낸 사람을 기다리지 않고 진행할까요? (동률 투표는 방장의 표를 따른다)')) force()
+                if (window.confirm('아직 안 끝낸 사람을 기다리지 않고 진행할까요?')) force()
               }}
               className="text-xs text-ash underline-offset-2 hover:text-fog hover:underline"
             >
@@ -207,7 +227,7 @@ export function ScenarioScreen({
         <main className="mt-2">
           {view.phase === 'story' && view.scene && <StoryScene key={sceneKey} view={view} send={send} />}
           {(view.phase === 'vote' || view.phase === 'split') && view.scene && (
-            <ChoiceScene key={sceneKey} view={view} send={send} reading={reading} suggestion={suggestion} suggest={suggest} />
+            <ChoiceScene key={sceneKey} view={view} send={send} reading={reading} />
           )}
           {view.phase === 'personal' && view.scene && (
             <PersonalScene key={sceneKey} view={view} send={send} reading={reading} />

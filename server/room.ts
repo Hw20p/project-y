@@ -4,10 +4,10 @@
 import { randomBytes } from 'node:crypto'
 import { findScenario, playableScenarios } from '../src/content/scenarios/index.ts'
 import { cleanName, MAX_PLAYERS, type LobbyModeInfo, type ScenarioClientAction, type ServerMsg } from '../src/net/protocol.ts'
-import { createScenarioGame, currentNode, reduceScenario, splitPickers, type ScenarioAction } from '../src/scenario/game.ts'
+import { createScenarioGame, currentNode, reduceScenario, splitPickers, splitShort, type ScenarioAction } from '../src/scenario/game.ts'
 import type { ScenarioGame } from '../src/scenario/state.ts'
 import { ARCHETYPES, DEFAULT_ARCHETYPE, isPanicked } from '../src/scenario/stats.ts'
-import { tiedChoiceIds, viewForScenario } from '../src/scenario/view.ts'
+import { viewForScenario } from '../src/scenario/view.ts'
 
 export type Send = (msg: ServerMsg) => void
 
@@ -51,8 +51,6 @@ export class Room {
   lastActivity = Date.now()
 
   private reading = new Set<string>()
-  /** 동률 투표에서 무작위로 추천된 선택지 (일시적 접속 정보). 장면이 바뀌거나 더는 동률이 아니면 보이지 않는다. */
-  private suggestion: { key: string; choiceId: string } | null = null
   private sceneKey = ''
   private nextId = 1
   /** 지금까지 시작한 판의 수. 같은 방에서 새 판을 할 때마다 늘어난다. */
@@ -199,7 +197,6 @@ export class Room {
     this.members = this.members.filter((m) => m.send && !m.left)
     this.sgame = null
     this.reading.clear()
-    this.suggestion = null
     this.sceneKey = ''
     this.touch()
     this.broadcast()
@@ -220,10 +217,10 @@ export class Room {
     return { ok: true, value: true }
   }
 
-  /** 방장 전용: 안 고른 사람을 기다리지 않고 진행 (동률 투표는 방장의 표를 따른다) */
+  /** 방장 전용: 안 고른 사람을 기다리지 않고 진행 */
   force(by: Member): void {
     if (by.id !== this.hostId) return
-    this.commitScenario({ type: 'force', tieBreak: by.id })
+    this.commitScenario({ type: 'force' })
   }
 
   setReading(member: Member, reading: boolean): void {
@@ -232,17 +229,6 @@ export class Room {
     if (reading === had) return
     if (reading) this.reading.add(member.id)
     else this.reading.delete(member.id)
-    this.broadcast()
-  }
-
-  /** 투표가 동률일 때 누구나: 동률인 선택지 중 하나를 무작위로 추천한다. 투표 결과는 바꾸지 않고, 의논의 실마리일 뿐이다. */
-  suggest(member: Member): void {
-    const g = this.sgame
-    const sc = g && findScenario(g.scenarioId)
-    if (!g || !sc) return
-    const tied = tiedChoiceIds(viewForScenario(sc, g, member.id).scene)
-    if (tied.length === 0) return
-    this.suggestion = { key: this.keyOf(), choiceId: tied[Math.floor(Math.random() * tied.length)] }
     this.broadcast()
   }
 
@@ -257,7 +243,6 @@ export class Room {
     if (key !== this.sceneKey) {
       this.sceneKey = key
       this.reading.clear()
-      this.suggestion = null
     }
   }
 
@@ -301,20 +286,17 @@ export class Room {
           stuck = here.every((p) => run.ready.includes(p.id))
           break
         case 'vote': {
-          // 접속 중인 사람이 다 골랐고 한 표 차이로 갈리는 동률이 아닐 때만 (동률은 의논해서 모아야 한다)
+          // 접속 중인 사람이 다 골랐는데 끊긴 사람 때문에 안 넘어갔다면 지금 있는 표로 센다 (동률이면 무작위로 뽑힌다)
           const who = here.filter((p) => !isPanicked(p))
-          if (who.length === 0 || !who.every((p) => run.votes[p.id])) break
-          const counts = new Map<string, number>()
-          for (const p of who) counts.set(run.votes[p.id], (counts.get(run.votes[p.id]) ?? 0) + 1)
-          const top = Math.max(...counts.values())
-          stuck = [...counts.values()].filter((n) => n === top).length === 1
+          stuck = who.length > 0 && who.every((p) => run.votes[p.id])
           break
         }
         case 'split': {
           const node = currentNode(sc, g)
           if (node.kind !== 'split') break
           const pickers = splitPickers(g, node).filter((p) => online.has(p.id))
-          stuck = pickers.length > 0 && pickers.every((p) => run.picks[p.id])
+          // 인원이 모자란 행동이 남아 있으면 (동률 투표처럼) 의논해서 모아야 하므로 자동으로 넘기지 않는다
+          stuck = pickers.length > 0 && pickers.every((p) => run.picks[p.id]) && splitShort(g, node).length === 0
           break
         }
         case 'personal':
@@ -327,7 +309,7 @@ export class Room {
       }
       if (!stuck) return
       try {
-        const next = reduceScenario(sc, g, { type: 'force', tieBreak: this.hostId })
+        const next = reduceScenario(sc, g, { type: 'force' })
         if (next === g) return
         this.sgame = next
       } catch (error) {
@@ -349,9 +331,6 @@ export class Room {
   messageFor(m: Member): ServerMsg {
     const sc = this.sgame && findScenario(this.sgame.scenarioId)
     if (this.sgame && sc) {
-      const view = viewForScenario(sc, this.sgame, m.id)
-      const tied = tiedChoiceIds(view.scene)
-      const suggested = this.suggestion?.key === this.keyOf() && tied.includes(this.suggestion.choiceId)
       return {
         t: 'sstate',
         code: this.code,
@@ -359,8 +338,7 @@ export class Room {
         hostId: this.hostId,
         online: Object.fromEntries(this.members.map((x) => [x.id, !!x.send])),
         reading: [...this.reading],
-        suggestion: suggested ? this.suggestion!.choiceId : null,
-        view,
+        view: viewForScenario(sc, this.sgame, m.id),
       }
     }
     return {

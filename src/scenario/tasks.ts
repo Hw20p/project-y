@@ -1,0 +1,319 @@
+// 과제 빌더: "과제 하나씩 풀기" 구조를 평범한 장면들로 풀어 준다. 엔진(game.ts)은 이 구조를 모른다 —
+// 그래서 검증기·전수 탐색기·화면이 그대로 동작한다.
+//
+// 과제 하나의 흐름:
+//   소개 → 조사(분할: 각자 한 곳을 살핀다) → 추리(투표: 답을 걸거나 패스) ─ 정답 → 다음 과제(순서는 판마다 무작위)
+//                                    └ 오답 / 패스 → 조사로 돌아간다. 이번에는 전에 없던 조사 선택지가 열려 있다.
+// 오답은 정신력과 조명(시계)을 깎고 그 답이 지워진다. 패스는 조명만 깎는다. 오답이 지워지므로 언제든 끝이 난다.
+// 조사 선택지는 3단계로 쌓인다: 처음에는 1단계만, 오답·패스가 한 번이면 2단계까지, 두 번 이상이면 3단계까지 열린다.
+import type { Cond, Effect, Node, PersonalOption, PersonalStep, PrivateFinding, QuestionDef, Route, Text, VarSpec } from './types.ts'
+
+export interface TaskProbe {
+  /** 조사 선택지 id (과제 안에서 유일) */
+  id: string
+  text: Text
+  /** 몇 단계 조사에서 열리는지 */
+  tier: 1 | 2 | 3
+  /**
+   * 이 곳을 살핀 사람에게 보이는 발견. 판마다 바뀌는 값에 따라 여러 개를 쓸 수 있고, 위에서부터 처음 맞는 것이 적용된다.
+   * 마지막은 `when` 없이 둔다 (그래야 어떤 판에서도 한 번 살핀 곳으로 기록된다).
+   */
+  findings: Omit<PrivateFinding, 'action'>[]
+  /** 이 곳을 동시에 살필 수 있는 최대 인원 (기본 1. `min`이 있으면 `min`) */
+  max?: number
+  /** 이 조사가 보이는 추가 조건. 예: 혼자일 때만 보이는 대체 조사 `{ party: { max: 1 } }` */
+  when?: Cond
+  /**
+   * "둘이 함께 해야 열리는" 조사: 이 곳을 살피는 최소 인원 (2 이상). 모자라면 조사가 진행되지 않고 함께할 사람을 모아야 한다.
+   * 혼자(또는 할 수 있는 사람이 `min`명보다 적을 때)는 선택지가 보이지 않으므로, 같은 정보를 혼자 얻는 다른 조사를 따로 둔다.
+   */
+  min?: number
+}
+
+export interface TaskAnswer {
+  id: string
+  text: Text
+  /** 정답이면 `true`, 판마다 다르면 정답인 판의 조건 (예: `{ var: 'lock', is: '2' }`). 오답이면 `false`. */
+  right: boolean | Cond
+  /** 오답일 때 고른 직후 보이는 이야기 (정답의 이야기는 과제의 `solved`) */
+  wrong?: Text
+  /** 오답이었음을 모두가 알게 되는 사실 id (조사 보드에 붙는다) */
+  wrongFact?: string
+}
+
+export interface TaskDef {
+  /** 과제 id (장면·깃발 이름에 쓰인다. `>`나 공백이 없어야 한다) */
+  id: string
+  title: string
+  /** 과제를 시작할 때 읽는 이야기 */
+  intro: Text
+  /** 조사 장면의 글 (기본 문구가 있다) */
+  probeText?: Text
+  probes: TaskProbe[]
+  /** 아무것도 살피지 않고 기다리는 선택지 (조사 칸이 모자란 인원이 고른다) */
+  waitText?: string
+  /** 추리 장면의 글: 풀어야 할 의문 */
+  question: Text
+  answers: TaskAnswer[]
+  /** 정답을 골랐을 때 이야기 (판마다 다르면 조각에 `when`을 단다) */
+  solved: Text
+  /** 정답을 골랐을 때 일어나는 일 */
+  onSolve?: Effect[]
+  /** 패스했을 때 읽는 이야기 */
+  passStory?: Text
+  /** 오답 대가 (기본: 조명 +1, 모두 정신력 −2) */
+  failCost?: Effect[]
+  /** 패스 대가 (기본: 조명 +1) */
+  passCost?: Effect[]
+  /** 조사 보드의 의문: 관련 사실들과 풀렸을 때 적힐 답 */
+  board: { text: string; facts: string[]; answer: Text }
+  /** 이 과제의 장면들이 낮인지 밤인지 (비우면 앞 장면의 시간대를 이어받는다) */
+  period?: 'day' | 'night'
+  /**
+   * 오답이나 패스를 하면 하루가 지나 밤이 온다. 이 밤(개인 행동)에 이 과제만의 선택지(단서·아이템)를 둔다.
+   * 시나리오 공통의 밤 선택지(`TasksSpec.nightCommon`, 스텟 올리기·휴식)가 뒤에 함께 나온다. 비워 두면 밤 없이 바로 조사로 돌아간다.
+   * 단서를 주는 선택지는 `when: { not: { knows } }`로 이미 알아낸 뒤에는 숨기는 것이 좋다.
+   */
+  night?: { text?: Text; options: PersonalOption[]; steps?: PersonalStep[] }
+}
+
+export interface TasksSpec {
+  tasks: TaskDef[]
+  /** 모든 과제를 풀면 가는 장면 */
+  after: string
+  /**
+   * 과제 하나가 풀릴 때마다(마지막 과제는 빼고) 거치는 막간의 길. 위에서부터 처음 맞는 것으로 가고, 마지막은 조건 없이 둔다.
+   * 막간 장면(사건·밤)의 끝은 `enter`로 이어 주어야 다음 과제로 간다. 없으면 바로 다음 과제로 간다.
+   */
+  between?: { when?: Cond; to: string }[]
+  /** 추리 장면의 "답을 걸지 않고 더 조사한다" 선택지 문구 (기본은 밤이 온다고 알린다) */
+  passText?: string
+  /** 모든 과제의 밤에 공통으로 나오는 선택지 (스텟 올리기·휴식). 과제를 푼 뒤의 밤도 이것만 쓴다. */
+  nightCommon?: PersonalOption[]
+  /** 풀이 순서를 뽑는 무작위 값의 이름 (기본 `order`) */
+  orderVar?: string
+}
+
+export interface TasksBuilt {
+  /** 시나리오의 `nodes`에 이어 붙인다 */
+  nodes: Node[]
+  /** 시나리오의 `vars`에 넣는다 (과제 풀이 순서) */
+  vars: VarSpec
+  /** 첫 과제로 가는 길. 과제를 시작하기 전 이야기 장면의 `next`로 쓴다. */
+  enter: Route
+  /** 시나리오 보드의 `questions`에 넣는다 (과제 순서대로가 아니라 정의한 순서) */
+  questions: QuestionDef[]
+}
+
+const DEFAULT_FAIL: Effect[] = [{ time: 1 }, { stat: 'sanity', add: -2, to: 'all' }]
+const DEFAULT_PASS: Effect[] = [{ time: 1 }]
+
+const flag = (id: string): Cond => ({ flag: id })
+const permutations = <T>(items: T[]): T[][] =>
+  items.length <= 1 ? [items] : items.flatMap((x, i) => permutations([...items.slice(0, i), ...items.slice(i + 1)]).map((rest) => [x, ...rest]))
+
+const startedFlag = (t: string) => `started-${t}`
+const solvedFlag = (t: string) => `solved-${t}`
+const failFlag = (t: string, a: string) => `ng-${t}-${a}`
+const passFlag = (t: string, n: 1 | 2) => `pass-${t}-${n}`
+const seenFlag = (t: string, p: string) => `seen-${t}-${p}`
+
+/** 틀릴 수 있는 답 (정답이 판마다 다른 답도 포함) */
+const wrongOf = (task: TaskDef): TaskAnswer[] => task.answers.filter((a) => a.right !== true)
+
+/** 이 과제에서 오답·패스로 단계가 오른 횟수가 `k` 이상인 조건 (오답은 답마다 한 번, 패스는 두 번까지 센다) */
+function missesAtLeast(task: TaskDef, k: 1 | 2): Cond {
+  const flags = [...wrongOf(task).map((a) => failFlag(task.id, a.id)), passFlag(task.id, 1), passFlag(task.id, 2)]
+  if (k === 1) return { any: flags.map(flag) }
+  const pairs: Cond[] = []
+  for (let i = 0; i < flags.length; i++) for (let j = i + 1; j < flags.length; j++) pairs.push({ all: [flag(flags[i]), flag(flags[j])] })
+  return { any: pairs }
+}
+
+/** 조사 `tier`단계 선택지가 열려 있는 조건 */
+const tierOpen = (task: TaskDef, tier: 1 | 2 | 3): Cond | undefined =>
+  tier === 1 ? undefined : missesAtLeast(task, tier === 2 ? 1 : 2)
+
+export function buildTasks(spec: TasksSpec): TasksBuilt {
+  const orderVar = spec.orderVar ?? 'order'
+  const tasks = spec.tasks
+  const nodes: Node[] = []
+
+  // 만들기 전에 작성 실수를 잡는다
+  const ids = new Set<string>()
+  for (const t of tasks) {
+    if (/[>\s]/.test(t.id)) throw new Error(`과제 id "${t.id}"에 '>'나 공백을 쓸 수 없다`)
+    if (ids.has(t.id)) throw new Error(`과제 id 중복 "${t.id}"`)
+    ids.add(t.id)
+    for (const tier of [1, 2, 3] as const) {
+      if (!t.probes.some((p) => p.tier === tier)) throw new Error(`과제 "${t.id}": ${tier}단계 조사 선택지가 하나도 없다`)
+    }
+    if (!t.answers.some((a) => a.right !== false)) throw new Error(`과제 "${t.id}": 정답이 없다`)
+    if (wrongOf(t).some((a) => !a.wrong)) throw new Error(`과제 "${t.id}": 틀릴 수 있는 답에 이야기(wrong)가 없다`)
+    for (const p of t.probes) {
+      if (p.min !== undefined && (!Number.isInteger(p.min) || p.min < 2)) throw new Error(`과제 "${t.id}" 조사 "${p.id}": min은 2 이상의 정수여야 한다`)
+      if (p.min !== undefined && p.max !== undefined && p.max < p.min) throw new Error(`과제 "${t.id}" 조사 "${p.id}": max가 min보다 작다`)
+      if (p.findings.length === 0 || p.findings[p.findings.length - 1].when) {
+        throw new Error(`과제 "${t.id}" 조사 "${p.id}": 마지막 발견은 조건 없이 두어야 한다`)
+      }
+    }
+  }
+
+  // ───── 과제 순서: 판마다 무작위
+  const orders = permutations(tasks.map((t) => t.id))
+  const orderKey = (o: string[]) => o.join('>')
+  const vars: VarSpec = { id: orderVar, pick: orders.map(orderKey) }
+  const allSolved: Cond = { all: tasks.map((t) => flag(solvedFlag(t.id))) }
+  const intro = (t: string) => `${t}-intro`
+  const enter: Route = [
+    { when: allSolved, to: spec.after },
+    ...orders.flatMap((o) =>
+      o.map((t, i) => ({
+        when: {
+          all: [{ var: orderVar, is: orderKey(o) }, ...o.slice(0, i).map((x) => flag(solvedFlag(x))), { not: flag(solvedFlag(t)) }],
+        } as Cond,
+        to: intro(t),
+      })),
+    ),
+    // 위에서 걸리지 않는 경우는 없지만, 길의 마지막은 조건 없이 두어야 한다
+    { to: spec.after },
+  ]
+
+  for (const task of tasks) {
+    const t = task.id
+    const firstNode = nodes.length
+    const probe = `${t}-probe`
+    const think = `${t}-think`
+    // 오답·패스 뒤에는 하루가 저문다: 이 과제만의 밤이 있으면 거기를 거쳐 조사로 돌아간다
+    const afterMiss = task.night ? `${t}-night` : probe
+    const fail = task.failCost ?? DEFAULT_FAIL
+    const pass = task.passCost ?? DEFAULT_PASS
+
+    // 오답·패스 뒤에 읽는 이야기에 붙는 안내: 새로 열린 조사가 있는지
+    const unlocked: { text: string; when: Cond }[] = [
+      { text: '\n새로 살필 수 있는 곳이 생겼다.', when: { all: [missesAtLeast(task, 1), { not: missesAtLeast(task, 2) }] } },
+      { text: '\n이제 살필 수 있는 곳은 전부 열렸다.', when: missesAtLeast(task, 2) },
+    ]
+    const plus = (text: Text): Text => [...(typeof text === 'string' ? [{ text }] : text), ...unlocked]
+
+    // 소개
+    nodes.push({ id: intro(t), kind: 'story', title: task.title, text: task.intro, onEnter: [{ flag: startedFlag(t) }], next: probe })
+
+    // 조사: 각자 한 곳을 살핀다. 1단계는 처음부터, 2단계는 오답·패스가 한 번이면, 3단계는 두 번 이상이면 열린다. 살핀 곳은 다시 살필 수 없다.
+    nodes.push({
+      id: probe,
+      kind: 'split',
+      title: `${task.title} · 조사`,
+      text: task.probeText ?? '어디를 살필지 정한다. 한 번에 한 곳씩만 살필 수 있고, 살핀 곳은 다시 살필 수 없다.',
+      actions: [
+        ...task.probes.map((p) => {
+          const open = tierOpen(task, p.tier)
+          const notSeen: Cond = { not: flag(seenFlag(t, p.id)) }
+          const conds = [...(open ? [open] : []), notSeen, ...(p.when ? [p.when] : [])]
+          return {
+            id: p.id,
+            text: p.text,
+            max: p.max ?? p.min ?? 1,
+            ...(p.min !== undefined ? { min: p.min } : {}),
+            when: conds.length === 1 ? conds[0] : ({ all: conds } as Cond),
+          }
+        }),
+        { id: `${t}-wait`, text: task.waitText ?? '살피지 않고 다른 사람이 하는 일을 지켜본다', calming: true },
+      ],
+      private: task.probes.flatMap((p) =>
+        p.findings.map((f): PrivateFinding => ({ ...f, action: p.id, effects: [...(f.effects ?? []), { flag: seenFlag(t, p.id) }] })),
+      ),
+      outcomes: [{ next: think }],
+    })
+
+    // 추리: 답을 걸거나 패스한다
+    nodes.push({
+      id: think,
+      kind: 'vote',
+      title: `${task.title} · 추리`,
+      text: task.question,
+      choices: [
+        ...task.answers.map((a) => ({
+          id: a.id,
+          text: a.text,
+          when: a.right === true ? undefined : ({ not: flag(failFlag(t, a.id)) } as Cond),
+          next: a.right === true ? `${t}-right` : a.right === false ? `${t}-wrong-${a.id}` : [{ when: a.right, to: `${t}-right` }, { to: `${t}-wrong-${a.id}` }],
+        })),
+        {
+          id: `${t}-pass`,
+          text: spec.passText ?? '확신이 없다 — 답을 걸지 않고 더 조사한다 (밤이 온다)',
+          next: [{ when: { not: flag(passFlag(t, 1)) }, to: `${t}-pass-1` }, { to: `${t}-pass-2` }],
+        },
+      ],
+    })
+
+    // 정답
+    nodes.push({
+      id: `${t}-right`,
+      kind: 'story',
+      title: `${task.title} · 풀렸다`,
+      text: task.solved,
+      // 풀린 과제의 조사·오답·패스 깃발은 더 읽히지 않으므로 지운다 (남겨 두면 전수 탐색의 상태 수가 과제마다 곱해진다)
+      onEnter: [
+        { flag: solvedFlag(t) },
+        ...task.probes.map((p): Effect => ({ flag: seenFlag(t, p.id), off: true })),
+        ...wrongOf(task).map((a): Effect => ({ flag: failFlag(t, a.id), off: true })),
+        { flag: passFlag(t, 1), off: true },
+        { flag: passFlag(t, 2), off: true },
+        ...(task.onSolve ?? []),
+      ],
+      next: spec.between ? [{ when: allSolved, to: spec.after }, ...spec.between] : enter,
+    })
+
+    // 오답: 그 답이 지워지고 대가를 치른 뒤 다시 조사한다
+    for (const a of wrongOf(task)) {
+      nodes.push({
+        id: `${t}-wrong-${a.id}`,
+        kind: 'story',
+        title: '아니었다',
+        text: plus(a.wrong ?? ''),
+        onEnter: [{ flag: failFlag(t, a.id) }, ...(a.wrongFact ? [{ learn: a.wrongFact, to: 'all' as const }] : []), ...fail],
+        next: afterMiss,
+      })
+    }
+
+    // 패스: 조명만 깎인다. 두 번째 이후의 패스는 단계가 더 오르지 않고 조명만 깎는다.
+    for (const n of [1, 2] as const) {
+      nodes.push({
+        id: `${t}-pass-${n}`,
+        kind: 'story',
+        title: '더 조사한다',
+        text: plus(task.passStory ?? '아직 확신이 없다. 답을 걸지 않고 다시 둘러보기로 했다. 그러는 사이 하루가 저물었다.'),
+        onEnter: [{ flag: passFlag(t, n) }, ...pass],
+        next: afterMiss,
+      })
+    }
+
+    // 밤 장면 (오답·패스 뒤): 이 과제의 선택지 + 공통 선택지
+    if (task.night) {
+      nodes.push({
+        id: `${t}-night`,
+        kind: 'personal',
+        period: 'night',
+        title: `${task.title} · 밤`,
+        text: task.night.text ?? '하루가 저물었다. 각자 흩어져 각자의 일을 한다.',
+        options: [...task.night.options, ...(spec.nightCommon ?? [])],
+        ...(task.night.steps ? { steps: task.night.steps } : {}),
+        next: probe,
+      })
+    }
+
+    if (task.period) for (const node of nodes.slice(firstNode)) node.period ??= task.period
+  }
+
+  const questions: QuestionDef[] = tasks.map((task) => ({
+    id: task.id,
+    text: task.board.text,
+    facts: task.board.facts,
+    solved: flag(solvedFlag(task.id)),
+    open: flag(startedFlag(task.id)), // 과제를 시작하면 의문이 보이고 "지금 과제"로 강조된다
+    answer: task.board.answer,
+  }))
+
+  return { nodes, vars, enter, questions }
+}

@@ -165,10 +165,11 @@ function Title({
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6 py-16">
-      <p className="text-xs tracking-widest text-ash">PROJECT-Y</p>
-      <h1 className="mt-2 font-serif-kr text-3xl font-bold">이상현상, 정체불명</h1>
+      <p className="text-xs tracking-[0.35em] text-blood">PROJECT-Y</p>
+      <h1 className="horror-title mt-2 font-serif-kr text-3xl font-bold">이상현상, 정체불명</h1>
+      <div className="blood-line mt-3" aria-hidden />
       <p className="mt-4 font-serif-kr leading-8 text-fog">
-        시설에서 대상을 조사한다. 낮에는 조사, 밤에는 개인정비. 알아낸 것은 말로 나눠야 쓸모가 생긴다.
+        시설에서 대상을 조사한다. 단서를 모아 추리하고, 틀리면 밤이 온다. 알아낸 단서는 모두에게 보인다.
       </p>
 
       <section className="mt-8 rounded border border-edge bg-panel/40 p-4">
@@ -186,34 +187,46 @@ function Title({
           />
         </label>
 
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            disabled={!trimmed}
-            onClick={() => withName((n) => ({ kind: 'create', name: n }))}
-            className="rounded border border-glow/50 bg-glow/10 px-3 py-2.5 text-sm text-glow hover:bg-glow/20 disabled:opacity-40"
-          >
-            방 만들기
-          </button>
-          <div className="flex gap-2">
+        <button
+          type="button"
+          disabled={!trimmed}
+          onClick={() => withName((n) => ({ kind: 'create', name: n }))}
+          className="mt-4 w-full rounded border border-glow/50 bg-glow/10 px-3 py-3 text-sm text-glow hover:bg-glow/20 disabled:opacity-40"
+        >
+          새 방 만들기
+        </button>
+
+        <label className="mt-4 block text-xs text-ash">
+          방 코드 (이미 만들어진 방에 들어갈 때)
+          <div className="mt-1 flex gap-2">
             <input
               value={code}
               maxLength={ROOM_CODE_LENGTH}
               onChange={(e) => setCode(e.target.value.toUpperCase())}
-              placeholder="코드"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && trimmed && code.length === ROOM_CODE_LENGTH) withName((n) => ({ kind: 'join', name: n, code }))
+              }}
+              placeholder={`${ROOM_CODE_LENGTH}글자`}
               aria-label="방 코드"
-              className={`${inputCls} min-w-0 text-center tracking-widest`}
+              autoCapitalize="characters"
+              autoComplete="off"
+              spellCheck={false}
+              className={`${inputCls} min-w-0 flex-1 text-center font-mono uppercase tracking-[0.3em] placeholder:tracking-normal placeholder:normal-case`}
             />
+            <button
+              type="button"
+              disabled={!trimmed || code.length !== ROOM_CODE_LENGTH}
+              onClick={() => withName((n) => ({ kind: 'join', name: n, code }))}
+              className={`shrink-0 rounded border px-4 py-2.5 text-sm disabled:opacity-40 ${
+                code.length === ROOM_CODE_LENGTH && trimmed
+                  ? 'border-glow/50 bg-glow/10 text-glow hover:bg-glow/20'
+                  : 'border-edge bg-panel hover:border-fog/50'
+              }`}
+            >
+              참가
+            </button>
           </div>
-        </div>
-        <button
-          type="button"
-          disabled={!trimmed || code.length !== ROOM_CODE_LENGTH}
-          onClick={() => withName((n) => ({ kind: 'join', name: n, code }))}
-          className="mt-2 w-full rounded border border-edge bg-panel px-3 py-2.5 text-sm hover:border-fog/50 disabled:opacity-40"
-        >
-          코드로 참가
-        </button>
+        </label>
 
         {session && (
           <button

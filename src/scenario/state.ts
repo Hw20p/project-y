@@ -74,8 +74,8 @@ export interface ScenarioResult {
   nodeId: string
   /** 투표 장면에서 이긴 선택지의 문장 */
   choiceText?: string
-  /** 투표가 동률이었는데 방장의 강제 진행으로 정해졌는지 */
-  forcedTie?: boolean
+  /** 투표가 동률이라 무작위로 하나가 뽑혔을 때: 동률이던 선택지들과 뽑힌 것의 문장 (화면의 추첨 연출에 쓴다) */
+  draw?: { options: string[]; chosen: string }
   /** 투표(플레이어 id → 선택지 id) */
   votes?: Record<string, string>
   /** 분할 행동·개인 선택(플레이어 id → 행동·선택지 id) */
