@@ -31,7 +31,7 @@ const MOTES = Array.from({ length: 18 }, (_, i) => ({
 /** 엔딩 본문에 입히는 글자 어긋남: 나쁜 엔딩만 크게 번지고 갈라진다 */
 export const ENDING_DISTORT: Record<EndingTier, Distort> = {
   bad: { level: 0.8, glitch: 0.06 },
-  neutral: { level: 0, glitch: 0.01 },
+  neutral: { level: 0, glitch: 0 },
   good: { level: 0, glitch: 0 },
   true: { level: 0, glitch: 0 },
 }

@@ -316,6 +316,9 @@ export function validateScenario(sc: Scenario): ValidationReport {
   // ───── 시나리오 전체
   if (sc.clock.labels.length === 0) at('시계', '이름이 하나 이상 필요함')
   if (sc.clock.per !== undefined && (!Number.isInteger(sc.clock.per) || sc.clock.per < 1)) at('시계', 'per는 1 이상의 정수여야 함')
+  if (sc.clock.lightName !== undefined && !sc.clock.light) at('시계', 'lightName은 light와 함께 써야 함')
+  if (sc.clock.meter !== undefined && !sc.deadline) at('시계', 'meter는 마감(deadline)이 있어야 남은 칸을 보일 수 있음')
+  if (sc.clock.meter !== undefined && sc.clock.light) at('시계', 'meter는 light와 함께 쓸 수 없음 (조명은 이미 막대로 보임)')
   if (sc.clock.byDay && !sc.nodes.some((n) => n.period)) at('시계', 'byDay는 장면에 period를 정해 둔 시나리오에서만 의미가 있음')
   if (!nodeIds.has(sc.start)) at('시작', `없는 장면 "${sc.start}"`)
   for (const v of sc.vars ?? []) if (v.pick.length < 2) at(`무작위 값 ${v.id}`, '후보가 2개 이상이어야 의미가 있음')

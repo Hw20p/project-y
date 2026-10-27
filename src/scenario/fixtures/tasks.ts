@@ -2,7 +2,7 @@
 // 각 과제는 후보 셋 중 하나가 정답이고, 조사 1단계는 후보 하나를 지워 주고, 2단계는 다른 후보를 지워 주고, 3단계는 답을 알려 준다. 게임에는 들어가지 않는다.
 // `tasksDemo`는 과제 셋(자물쇠·램프·문, 순서 6가지)이고 규칙 시험용이다. `tasksSmall`은 과제 둘에 조사 선택지를 단계마다 하나로 줄인 것으로,
 // 상태 수가 작아서 전수 탐색기가 끝까지 본다. 탐색기에서 고르는 것은 이쪽이고, 자물쇠의 1단계에 "둘이서 함께 살핀다"(2인 선택지)가 있다.
-import { buildTasks, type TaskDef, type TaskProbe } from '../tasks.ts'
+import { buildTasks, type ChainStep, type TaskDef, type TaskProbe } from '../tasks.ts'
 import type { Cond, Scenario } from '../types.ts'
 
 const VALUES = ['1', '2', '3']
@@ -57,11 +57,46 @@ function makeTask(id: string, title: string, slim: boolean, pair: boolean): Task
   }
 }
 
+/** 추리 사슬을 쓰는 자물쇠: 3단계 (2번보다 큰가 → 2번인가 → 몇 번인가). 시험용이라 근거 이야기는 짧다. */
+export function chainLockDef(): TaskDef {
+  const is = (v: string): Cond => ({ var: 'lock', is: v })
+  const chain: ChainStep[] = [
+    {
+      question: '번호는 2번보다 큰가?',
+      options: [
+        { id: 'big', text: '크다', right: is('3'), wrong: '큰 쪽을 눌렀지만 열리지 않았다.' },
+        { id: 'small', text: '크지 않다', right: { not: is('3') }, wrong: '작은 쪽을 눌렀지만 열리지 않았다.' },
+      ],
+      ok: '눈금이 그렇게 말하고 있었다.',
+    },
+    {
+      question: '번호는 정확히 2번인가?',
+      options: [
+        { id: 'two', text: '2번이다', right: is('2'), wrong: '2번을 눌렀지만 열리지 않았다.' },
+        { id: 'not-two', text: '2번이 아니다', right: { not: is('2') }, wrong: '2번이 아니라고 했지만 열리지 않았다.' },
+      ],
+      ok: '손끝에 걸리는 느낌이 그랬다.',
+    },
+    {
+      question: '그렇다면 번호는 무엇인가?',
+      options: VALUES.map((v) => ({
+        id: `n${v}`,
+        text: `${v}번이다`,
+        right: is(v),
+        wrong: `${v}번을 눌렀지만 열리지 않았다.`,
+        wrongFact: `no-lock-${v}`,
+      })),
+    },
+  ]
+  const { answers: _answers, ...base } = makeTask('lock', '자물쇠', true, false)
+  return { ...base, chain }
+}
+
 const TITLES: Record<string, string> = { lock: '자물쇠', lamp: '램프', door: '문' }
 
 /** `pair`: 첫 과제(자물쇠)에 2인 선택지를 둔다 */
-function makeScenario(id: string, code: string, name: string, taskIds: string[], slim: boolean, pair: boolean): Scenario {
-  const defs = taskIds.map((t) => makeTask(t, TITLES[t], slim, pair && t === 'lock'))
+function makeScenario(id: string, code: string, name: string, taskIds: string[], slim: boolean, pair: boolean, custom?: TaskDef[]): Scenario {
+  const defs = custom ?? taskIds.map((t) => makeTask(t, TITLES[t], slim, pair && t === 'lock'))
   const built = buildTasks({ tasks: defs, after: 'finale' })
   return {
     id,
@@ -109,4 +144,5 @@ function makeScenario(id: string, code: string, name: string, taskIds: string[],
 }
 
 export const tasksDemo = makeScenario('tasks', 'T-03', '시험용 과제', ['lock', 'lamp', 'door'], false, false)
+export const tasksChain = makeScenario('tasks-chain', 'T-05', '시험용 추리 사슬', ['lock'], true, false, [chainLockDef()])
 export const tasksSmall = makeScenario('tasks-small', 'T-04', '시험용 과제(작은 것)', ['lock', 'door'], true, true)

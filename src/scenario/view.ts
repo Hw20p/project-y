@@ -86,6 +86,8 @@ export interface SceneView {
   kind: 'story' | 'vote' | 'split' | 'personal'
   title?: string
   text: string
+  /** 이야기 장면: 'success'면 성공 표시를 보인다 */
+  tone?: 'success'
   choices: SceneChoiceView[]
   /** 내가 지금 고른 선택지·행동 */
   myChoiceId: string | null
@@ -137,7 +139,9 @@ export interface ScenarioView {
   time: number
   clockLabel: string
   /** 시계가 조명일 때만: 마감까지 조명이 몇 단계이고(`max`) 지금 몇 단계나 어두워졌는지(`level`) */
-  light: { max: number; level: number } | null
+  light: { max: number; level: number; name?: string } | null
+  /** 조명이 아닌 시계를 막대로 보이는 경우: 막대의 이름("남은 밤" 등), 마감까지 칸 수(`max`), 지금까지 흐른 칸(`level`) */
+  meter: { name: string; max: number; level: number } | null
   phase: RunPhase
   me: { id: string; name: string; hurt: boolean; panic: boolean; stats: Stats; items: ItemDef[]; facts: HintDef[] }
   players: PlayerView[]
@@ -195,7 +199,7 @@ export function viewForScenario(sc: Scenario, g: ScenarioGame, playerId: string)
   // ───── 장면
   let scene: SceneView | null = null
   if (node.kind === 'story') {
-    scene = { ...BASE_SCENE, kind: 'story', title: node.title, text: evalText(node.text, ctx) }
+    scene = { ...BASE_SCENE, kind: 'story', title: node.title, text: evalText(node.text, ctx), ...(node.tone ? { tone: node.tone } : {}) }
   } else if (node.kind === 'vote' && run.phase === 'vote') {
     const open = openVoteChoices(g, node)
     const openIds = new Set(open.map((c) => c.id))
@@ -373,7 +377,15 @@ export function viewForScenario(sc: Scenario, g: ScenarioGame, playerId: string)
     clockLabel: clock[Math.min(clockStep(run.time), clock.length - 1)] ?? '',
     light:
       sc.clock.light && sc.deadline
-        ? { max: clockStep(sc.deadline.time), level: Math.min(clockStep(run.time), clockStep(sc.deadline.time)) }
+        ? {
+            max: clockStep(sc.deadline.time),
+            level: Math.min(clockStep(run.time), clockStep(sc.deadline.time)),
+            ...(sc.clock.lightName !== undefined ? { name: sc.clock.lightName } : {}),
+          }
+        : null,
+    meter:
+      sc.clock.meter !== undefined && sc.deadline
+        ? { name: sc.clock.meter, max: clockStep(sc.deadline.time), level: Math.min(clockStep(run.time), clockStep(sc.deadline.time)) }
         : null,
     timeOfDay,
     phase: run.phase,

@@ -8,7 +8,7 @@ import type { ResultView, ScenarioView } from '../../scenario/view.ts'
 import { Changes, Continue, NewFacts, SkipHint } from './parts.tsx'
 
 /** 결과가 화면에 일으키는 충격의 종류 (화면 번쩍임·효과음에 쓰인다) */
-export type Impact = 'death' | 'fragment' | 'item' | 'good' | 'bad'
+export type Impact = 'death' | 'fragment' | 'item' | 'good' | 'bad' | 'success'
 
 type Send = ScenarioClient['send']
 

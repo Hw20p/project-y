@@ -5,6 +5,11 @@
 //   소개 → 조사(분할: 각자 한 곳을 살핀다) → 추리(투표: 답을 걸거나 패스) ─ 정답 → 다음 과제(순서는 판마다 무작위)
 //                                    └ 오답 / 패스 → 조사로 돌아간다. 이번에는 전에 없던 조사 선택지가 열려 있다.
 // 오답은 정신력과 조명(시계)을 깎고 그 답이 지워진다. 패스는 조명만 깎는다. 오답이 지워지므로 언제든 끝이 난다.
+//
+// 추리 사슬(`TaskDef.chain`): 답을 한 번에 고르는 대신 추리를 이렇게 이어 간다.
+//   추리 장면에는 "추리를 시작한다 / 더 조사한다" 둘뿐이다. 시작하면 단계마다 모두가 투표하고(동률은 추첨) 맞으면 근거가 된 단서를
+//   이야기로 밝히며 다음 단계로 간다. 중간에 틀리면 그 시도가 거기서 끝나고 오답의 대가와 밤이 이어진다. 마지막 단계까지 맞으면 풀린다.
+//   틀린 시도와 패스는 같은 횟수(`pass-<과제>-1·2`)로 세어져 조사 선택지가 3단계까지 열린다.
 // 조사 선택지는 3단계로 쌓인다: 처음에는 1단계만, 오답·패스가 한 번이면 2단계까지, 두 번 이상이면 3단계까지 열린다.
 // 위험한 곳: `risk`가 있는 조사 중 하나가 판마다 무작위로 "위험한 곳"으로 뽑힌다. 거기를 살핀 사람은 발견은 그대로 얻되 이야기와 대가(`hazard`)를 치른다.
 import type { Cond, Effect, Node, PersonalOption, PersonalStep, PrivateFinding, QuestionDef, Route, Text, VarSpec } from './types.ts'
@@ -49,6 +54,19 @@ export interface TaskAnswer {
   wrongFact?: string
 }
 
+/** 추리 사슬의 한 단계 */
+export interface ChainStep {
+  /** 이 단계에서 풀어야 할 질문. 알아낸 단서에 따라 조각을 덧붙일 수 있다 (예: 이미 밝혀진 오답 알림) */
+  question: Text
+  /** 이 단계의 보기. 맞는 것이 판마다 달라도 된다(`right`가 조건). 틀린 보기는 `wrong`(이야기)이 있어야 한다. */
+  options: TaskAnswer[]
+  /**
+   * 맞게 골랐을 때의 이야기: 어떤 단서가 근거였는지 보여 준다. 단서를 아는지(`knows`)에 따라 조각을 나누어,
+   * 근거가 있었으면 그 단서를, 없었으면 "감이었다"를 쓴다. 마지막 단계는 비워도 되고, 있으면 과제의 `solved` 앞에 붙는다.
+   */
+  ok?: Text
+}
+
 export interface TaskDef {
   /** 과제 id (장면·깃발 이름에 쓰인다. `>`나 공백이 없어야 한다) */
   id: string
@@ -62,8 +80,14 @@ export interface TaskDef {
   waitText?: string
   /** 추리 장면의 글: 풀어야 할 의문 */
   question: Text
-  answers: TaskAnswer[]
-  /** 정답을 골랐을 때 이야기 (판마다 다르면 조각에 `when`을 단다) */
+  /** 한 번에 고르는 답. `chain`이 없을 때 쓴다 (둘 중 하나만) */
+  answers?: TaskAnswer[]
+  /**
+   * 추리 사슬: 3단계 이상. 있으면 추리 장면이 "추리를 시작한다 / 더 조사한다"로 바뀌고 단계마다 투표한다.
+   * `answers`와 함께 쓸 수 없다.
+   */
+  chain?: ChainStep[]
+  /** 정답을 골랐을 때(사슬이면 마지막 단계까지 맞았을 때) 이야기 (판마다 다르면 조각에 `when`을 단다) */
   solved: Text
   /** 정답을 골랐을 때 일어나는 일 */
   onSolve?: Effect[]
@@ -98,6 +122,8 @@ export interface TasksSpec {
   between?: { when?: Cond; to: string }[]
   /** 추리 장면의 "답을 걸지 않고 더 조사한다" 선택지 문구 (기본은 밤이 온다고 알린다) */
   passText?: string
+  /** 추리 사슬이 있는 과제의 "추리를 시작한다" 선택지 문구 */
+  reasonText?: string
   /** 모든 과제의 밤에 공통으로 나오는 선택지 (스텟 올리기·휴식). 과제를 푼 뒤의 밤도 이것만 쓴다. */
   nightCommon?: PersonalOption[]
   /** 풀이 순서를 뽑는 무작위 값의 이름 (기본 `order`) */
@@ -154,7 +180,7 @@ function withRisk(task: TaskDef, probe: TaskProbe): TaskProbe['findings'] {
 }
 
 /** 틀릴 수 있는 답 (정답이 판마다 다른 답도 포함) */
-const wrongOf = (task: TaskDef): TaskAnswer[] => task.answers.filter((a) => a.right !== true)
+const wrongOf = (task: TaskDef): TaskAnswer[] => (task.answers ?? []).filter((a) => a.right !== true)
 
 /** 이 과제에서 오답·패스로 단계가 오른 횟수가 `k` 이상인 조건 (오답은 답마다 한 번, 패스는 두 번까지 센다) */
 function missesAtLeast(task: TaskDef, k: 1 | 2): Cond {
@@ -183,8 +209,21 @@ export function buildTasks(spec: TasksSpec): TasksBuilt {
     for (const tier of [1, 2, 3] as const) {
       if (!t.probes.some((p) => p.tier === tier)) throw new Error(`과제 "${t.id}": ${tier}단계 조사 선택지가 하나도 없다`)
     }
-    if (!t.answers.some((a) => a.right !== false)) throw new Error(`과제 "${t.id}": 정답이 없다`)
-    if (wrongOf(t).some((a) => !a.wrong)) throw new Error(`과제 "${t.id}": 틀릴 수 있는 답에 이야기(wrong)가 없다`)
+    if (t.chain) {
+      if (t.answers?.length) throw new Error(`과제 "${t.id}": 추리 사슬(chain)과 답(answers)을 함께 쓸 수 없다`)
+      if (t.chain.length < 3) throw new Error(`과제 "${t.id}": 추리 사슬은 3단계 이상이어야 한다`)
+      t.chain.forEach((s, k) => {
+        const where = `과제 "${t.id}" 추리 ${k + 1}단계`
+        if (s.options.length < 2) throw new Error(`${where}: 보기가 둘 이상이어야 한다`)
+        if (new Set(s.options.map((o) => o.id)).size !== s.options.length) throw new Error(`${where}: 보기 id가 겹친다`)
+        if (!s.options.some((o) => o.right !== false)) throw new Error(`${where}: 맞는 보기가 없다`)
+        if (s.options.some((o) => o.right !== true && !o.wrong)) throw new Error(`${where}: 틀릴 수 있는 보기에 이야기(wrong)가 없다`)
+        if (k < t.chain!.length - 1 && !s.ok) throw new Error(`${where}: 맞았을 때 근거를 보이는 이야기(ok)가 없다`)
+      })
+    } else {
+      if (!t.answers?.some((a) => a.right !== false)) throw new Error(`과제 "${t.id}": 정답이 없다`)
+      if (wrongOf(t).some((a) => !a.wrong)) throw new Error(`과제 "${t.id}": 틀릴 수 있는 답에 이야기(wrong)가 없다`)
+    }
     const risky = t.probes.filter((p) => p.risk !== undefined)
     if (risky.length === 1) throw new Error(`과제 "${t.id}": 위험한 곳(risk)은 둘 이상이어야 판마다 어디가 위험한지 달라진다`)
     if (risky.length > 0 && !t.hazard?.length) throw new Error(`과제 "${t.id}": risk가 있는 조사가 있으면 대가(hazard)도 있어야 한다`)
@@ -273,33 +312,89 @@ export function buildTasks(spec: TasksSpec): TasksBuilt {
       outcomes: [{ next: think }],
     })
 
-    // 추리: 답을 걸거나 패스한다
+    // 추리: 답을 걸거나 패스한다. 사슬이 있으면 "추리를 시작한다"와 "더 조사한다"뿐이다.
+    const passChoice = {
+      id: `${t}-pass`,
+      text: spec.passText ?? '확신이 없다 — 답을 걸지 않고 더 조사한다 (밤이 온다)',
+      next: [{ when: { not: flag(passFlag(t, 1)) }, to: `${t}-pass-1` }, { to: `${t}-pass-2` }] as Route,
+    }
+    const chain = task.chain
     nodes.push({
       id: think,
       kind: 'vote',
       title: `${task.title} · 추리`,
       text: task.question,
-      choices: [
-        ...task.answers.map((a) => ({
-          id: a.id,
-          text: a.text,
-          when: a.right === true ? undefined : ({ not: flag(failFlag(t, a.id)) } as Cond),
-          next: a.right === true ? `${t}-right` : a.right === false ? `${t}-wrong-${a.id}` : [{ when: a.right, to: `${t}-right` }, { to: `${t}-wrong-${a.id}` }],
-        })),
-        {
-          id: `${t}-pass`,
-          text: spec.passText ?? '확신이 없다 — 답을 걸지 않고 더 조사한다 (밤이 온다)',
-          next: [{ when: { not: flag(passFlag(t, 1)) }, to: `${t}-pass-1` }, { to: `${t}-pass-2` }],
-        },
-      ],
+      choices: chain
+        ? [
+            {
+              id: `${t}-reason`,
+              text: spec.reasonText ?? '추리를 시작한다 (틀리면 대가를 치른다)',
+              next: `${t}-c1`,
+            },
+            passChoice,
+          ]
+        : [
+            ...(task.answers ?? []).map((a) => ({
+              id: a.id,
+              text: a.text,
+              when: a.right === true ? undefined : ({ not: flag(failFlag(t, a.id)) } as Cond),
+              next: a.right === true ? `${t}-right` : a.right === false ? `${t}-wrong-${a.id}` : [{ when: a.right, to: `${t}-right` }, { to: `${t}-wrong-${a.id}` }],
+            })),
+            passChoice,
+          ],
     })
 
-    // 정답
+    // 추리 사슬: 단계마다 투표 → 맞으면 근거를 밝히는 이야기 → 다음 단계. 틀리면 그 시도가 끝나고 대가를 치른 뒤 밤이 온다.
+    // 틀린 시도는 패스와 같은 횟수(`pass-<과제>-1·2`)로 센다: 첫 번째와 두 번째 이후가 다른 장면이다.
+    if (chain) {
+      const last = chain.length
+      chain.forEach((step, k) => {
+        const i = k + 1
+        const after = i === last ? `${t}-right` : `${t}-c${i}-ok`
+        nodes.push({
+          id: `${t}-c${i}`,
+          kind: 'vote',
+          title: `${task.title} · 추리 ${i}/${last}`,
+          text: step.question,
+          choices: step.options.map((o) => {
+            const miss: { when?: Cond; to: string }[] = [
+              { when: { not: flag(passFlag(t, 1)) }, to: `${t}-c${i}-wrong-${o.id}-1` },
+              { to: `${t}-c${i}-wrong-${o.id}-2` },
+            ]
+            return {
+              id: o.id,
+              text: o.text,
+              next: o.right === true ? after : o.right === false ? miss : [{ when: o.right, to: after }, ...miss],
+            }
+          }),
+        })
+        for (const o of step.options) {
+          if (o.right === true) continue
+          for (const n of [1, 2] as const) {
+            nodes.push({
+              id: `${t}-c${i}-wrong-${o.id}-${n}`,
+              kind: 'story',
+              title: '아니었다',
+              text: plus(o.wrong ?? ''),
+              onEnter: [{ flag: passFlag(t, n) }, ...(o.wrongFact ? [{ learn: o.wrongFact, to: 'all' as const }] : []), ...fail],
+              next: afterMiss,
+            })
+          }
+        }
+        if (i < last) {
+          nodes.push({ id: `${t}-c${i}-ok`, kind: 'story', title: `${task.title} · 근거`, tone: 'success', text: step.ok ?? '', next: `${t}-c${i + 1}` })
+        }
+      })
+    }
+
+    // 정답 (사슬이면 마지막 단계의 근거 이야기가 풀이 앞에 붙는다)
+    const lastOk = chain?.[chain.length - 1].ok
     nodes.push({
       id: `${t}-right`,
       kind: 'story',
       title: `${task.title} · 풀렸다`,
-      text: task.solved,
+      tone: 'success',
+      text: lastOk ? [...pieces(lastOk), { text: '\n' }, ...pieces(task.solved)] : task.solved,
       // 풀린 과제의 조사·오답·패스 깃발은 더 읽히지 않으므로 지운다 (남겨 두면 전수 탐색의 상태 수가 과제마다 곱해진다)
       onEnter: [
         { flag: solvedFlag(t) },

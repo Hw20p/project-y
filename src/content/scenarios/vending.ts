@@ -7,14 +7,15 @@
 //
 // 과제 셋을 하나씩, 판마다 다른 순서로 푼다. 과제마다 추리가 다르다:
 //   받는 것 — 순서형: 자판기는 어제 받은 것의 다음 것을 받는다. 순서 규칙과 어제의 기록을 합쳐 오늘을 구한다.
+//             추리는 4단계 사슬이다(규칙 → 도는 방향 → 어제 → 오늘). 단계마다 근거가 된 단서가 이야기로 밝혀지고, 틀리면 그 시도가 끝난다.
 //   버튼 — 대응형: 버튼 아래 전선 세 가닥(빨강·파랑·초록)이 칸 세 곳에 이어져 있고, 눌러야 할 칸은 초록 선이 닿은 칸이다. 단서를 맞춰 짝을 찾는다.
 //   거스름돈 — 장부형: 행동마다 장부가 어떻게 변하는지 모아, 거래가 닫히는(합이 0이 되고 처음으로 돌아가지 않는) 행동을 고른다.
-// 과제 사이에는 사건(혼자 울리는 소리·자판기의 목소리)과 잠깐의 휴식(개인 행동)이 있다. 오답·패스는 시계(새벽)를 한 칸 앞당기고, 시계가 끝에 닿으면 정산된다.
+// 과제 사이에는 사건(혼자 울리는 소리·자판기의 목소리)과 잠깐의 휴식(개인 행동)이 있다. 오답·패스는 시계(오염 — 자판기의 푸른 불빛이 번져 방이 물든다)를 한 칸 올리고, 화면이 그만큼 어두워지며, 시계가 끝에 닿으면 정산된다.
 // 혼자(1명)도 할 수 있어서 둘이 해야 열리는 조사에는 같은 정보를 혼자 얻는 대체 조사(정신력이 든다)가 있다.
 // 글은 '나'나 '당신'을 쓰지 않아 혼자일 때도 여럿일 때도 자연스럽다.
 //
 // 판마다 바뀌는 값: price(받는 품목 coin·photo·badge), button(눌러야 할 칸 A·B·C), wires(전선이 이어진 방식 1·2), order(과제 순서).
-import { buildTasks, type TaskAnswer, type TaskDef, type TaskProbe } from '../../scenario/tasks.ts'
+import { buildTasks, type ChainStep, type TaskAnswer, type TaskDef, type TaskProbe } from '../../scenario/tasks.ts'
 import type { Cond, Node, PersonalOption, Scenario } from '../../scenario/types.ts'
 
 /** 주머니 속 세 가지 (오늘 밤 자판기가 받는 것은 이 중 하나). 순서가 곧 자판기가 받는 순서다. */
@@ -93,6 +94,129 @@ const SLOT_TEXT: Record<ItemId, string> = {
   badge: '투입구에는 단단한 플라스틱 모서리가 꽂힌 자국이 하나도 없다. 사원증처럼 딱딱한 것은 받지 않는 모양이다.',
 }
 const SHAPE: Record<ItemId, string> = { coin: '작고 둥근 홈', photo: '얇고 긴 홈', badge: '두껍고 단단한 홈' }
+
+/**
+ * 받는 것의 추리 사슬: 규칙 → 도는 방향 → 어제 → 오늘. 단계마다 근거가 된 단서가 이야기로 밝혀진다.
+ * 근거가 없으면(그 단서를 아무도 얻지 못했으면) 맞혀도 "감이었다"가 된다.
+ */
+function itemChain(): ChainStep[] {
+  const knows = (id: string): Cond => ({ knows: id })
+  const no = (id: string): Cond => ({ not: knows(id) })
+  const all = (...conds: Cond[]): Cond => ({ all: conds })
+  const miss = (what: string, why: string) => `${what}\n표시등이 [[shake|붉게]] 깜빡였다. ${why}\n추리는 여기서 끝났다.`
+
+  return [
+    {
+      question: '추리를 시작한다. 먼저, 자판기는 받는 것을 어떤 규칙으로 정하는가?',
+      options: [
+        { id: 'rule-cycle', text: '정해진 순서가 있다 — 하루에 하나씩, 한 바퀴를 돌면 처음으로 돌아온다', right: true },
+        {
+          id: 'rule-random',
+          text: '그날그날 무작위다',
+          right: false,
+          wrong: miss('“무작위다.” 그렇게 결론짓고 투입구 앞에 아무것이나 가져다 댔다.', '무작위라면 전임자들의 낙서가 그렇게 같은 순서로 되풀이될 리 없다. 규칙을 잘못 짚으니 그 위에 쌓은 것이 모두 무너졌다.'),
+        },
+        {
+          id: 'rule-same',
+          text: '늘 같은 것만 받는다',
+          right: false,
+          wrong: miss('“늘 같은 것이다.” 어제와 같은 것을 내밀자 투입구가 입을 꾹 다물었다.', '어제 받은 것을 오늘은 받지 않는다. 늘 같은 것이었다면 이 기계는 벌써 멈췄을 것이다.'),
+        },
+        {
+          id: 'rule-price',
+          text: '값나가는 것부터 차례로 빼앗는다',
+          right: false,
+          wrong: miss('“값나가는 것부터다.” 사원증을 먼저 내밀었다.', '자판기는 값을 매기지 않는다. 순서를 따를 뿐이다.'),
+        },
+      ],
+      ok: [
+        {
+          text: '낙서가 근거였다. 날짜 옆에 품목이 한 글자씩, 동전·사진·사원증이 같은 순서로 되풀이되고 있었다. 무작위가 아니다. 자판기는 순서대로 돈다.',
+          when: knows('item-cycle'),
+        },
+        { text: '이 규칙을 말해 주는 기록은 읽지 못했다. 근거 없이 감이 닿았을 뿐이다. 그래도 자판기는 낮게 ‘응’ 하고 대답하는 것 같았다.', when: no('item-cycle') },
+      ],
+    },
+    {
+      question: '순서가 있다면, 어느 쪽으로 도는가?',
+      options: [
+        { id: 'dir-up', text: '가벼운 것에서 소중한 것으로 — 동전, 사진, 사원증, 다시 동전', right: true },
+        {
+          id: 'dir-down',
+          text: '소중한 것에서 가벼운 것으로 — 사원증, 사진, 동전, 다시 사원증',
+          right: false,
+          wrong: miss('“소중한 것부터 내려간다.” 순서를 거꾸로 짚었다.', '투입구가 거꾸로 돌아가는 소리를 냈다. 이 기계는 거꾸로 가지 않는다.'),
+        },
+        {
+          id: 'dir-mine',
+          text: '거래하는 사람이 가장 아끼는 것부터',
+          right: false,
+          wrong: miss('“가장 아끼는 것부터다.” 주머니 속에서 가장 아끼는 것을 쥐었다.', '자판기는 사람의 마음을 읽지 않는다. 읽는 것은 순서뿐이다.'),
+        },
+      ],
+      ok: [
+        {
+          text: '낙서 아래에 누군가 크게 적어 둔 글이 근거였다. “가벼운 것에서 소중한 것으로.” 동전 다음은 사진, 사진 다음은 사원증, 사원증 다음은 다시 동전이다.',
+          when: knows('item-cycle'),
+        },
+        { text: '순서의 방향을 알려 주는 글은 읽지 못했다. 이것도 감이다.', when: no('item-cycle') },
+      ],
+    },
+    {
+      question: '그렇다면 어제 이 자판기가 받은 것은 무엇인가?',
+      options: ITEMS.map(
+        ([id, label]): TaskAnswer => ({
+          id: `yd-${id}`,
+          text: `${label}이다`,
+          right: priceIs(nextOf(ITEM_ORDER, id, 1)),
+          wrong: miss(`어제 받은 것은 ${label}이었다고 짚었다.`, '어제의 기록은 그렇게 말하지 않는다. 어제를 잘못 짚으면 오늘도 틀린다.'),
+        }),
+      ),
+      ok: ITEM_ORDER.flatMap((p) => {
+        const y = itemLabel(yesterdayOf(p))
+        return [
+          {
+            text: `영수증이 근거였다. 맨 윗줄에 어제 날짜의 거래가 한 줄 찍혀 있었다. “어제: ${y}.” 어제 자판기가 받은 것은 ${y}이다.`,
+            when: all(priceIs(p), knows(`yday-${p}`)),
+          },
+          {
+            text: `벽 맨 위쪽, 가장 최근 날짜 옆의 글씨가 근거였다. 어제 거래한 사람이 남긴 글씨다. “${y}.” 어제 자판기가 받은 것은 ${y}이다.`,
+            when: all(priceIs(p), no(`yday-${p}`), knows(`night-last-${p}`)),
+          },
+          {
+            text: '어제의 기록은 어디서도 찾지 못했다. 이것은 근거가 아니라 감이다. 그런데도 이상하게 확신이 든다.',
+            when: all(priceIs(p), no(`yday-${p}`), no(`night-last-${p}`)),
+          },
+        ]
+      }),
+    },
+    {
+      question: [
+        { text: '순서는 가벼운 것에서 소중한 것으로 돌고, 어제 받은 것도 알았다. 그렇다면 오늘 밤 자판기가 받는 것은?' },
+        // 투입구 소리·자국이나 앞선 오답으로 이미 아니라고 밝혀진 것은 질문에 덧붙는다
+        ...ITEM_ORDER.map((x) => ({ text: `\n(${itemLabel(x)}은 이미 아니라고 밝혀졌다.)`, when: knows(`no-item-${x}`) })),
+      ],
+      options: ITEMS.map(
+        ([id, label]): TaskAnswer => ({
+          id: `item-${id}`,
+          text: `${label}이다`,
+          right: priceIs(id),
+          wrong: `투입구 앞에 ${label}을 가져다 댔다. 넣지는 않았다.\n표시등이 [[shake|붉게]] 깜빡였고 투입구가 잠깐 오므라들었다. 손끝이 차가워졌다.\n이것은 아니다. 하마터면 손가락째 삼켜질 뻔했다.`,
+          wrongFact: `no-item-${id}`,
+        }),
+      ),
+      // 풀이(solved) 앞에 붙는다: 결론이 어디서 나왔는지, 다른 단서가 있었다면 그것도 맞아떨어졌는지
+      ok: ITEM_ORDER.flatMap((p) => [
+        {
+          text: `어제가 ${itemLabel(yesterdayOf(p))}이었고 순서는 가벼운 것에서 소중한 것으로 돈다. 그다음 차례는 ${itemLabel(p)}이다.`,
+          when: priceIs(p),
+        },
+        { text: ' 장부의 오늘 줄도 같은 이름을 가리킨다.', when: all(priceIs(p), knows(`ledger-${p}`)) },
+        { text: ' 투입구 안쪽의 홈 모양도 맞는다.', when: all(priceIs(p), knows(`today-${p}`)) },
+      ]),
+    },
+  ]
+}
 
 const item: TaskDef = {
   id: 'item',
@@ -209,16 +333,8 @@ const item: TaskDef = {
   },
   hazard: [{ hurt: 'actor' }],
   question: '자판기는 오늘 밤 무엇을 받는가?',
-  answers: ITEMS.map(
-    ([id, label]): TaskAnswer => ({
-      id: `item-${id}`,
-      text: `${label}이다`,
-      right: priceIs(id),
-      wrong: `투입구 앞에 ${label}을 가져다 댔다. 넣지는 않았다.\n표시등이 [[shake|붉게]] 깜빡였고 투입구가 잠깐 오므라들었다. 손끝이 차가워졌다.\n이것은 아니다. 하마터면 손가락째 삼켜질 뻔했다.`,
-      wrongFact: `no-item-${id}`,
-    }),
-  ),
-  passStory: '아직 확신이 없다. 답을 걸지 않고 다시 둘러보기로 했다. 그러는 사이 자판기의 불빛이 한 칸 낮아졌다.',
+  chain: itemChain(),
+  passStory: '아직 확신이 없다. 답을 걸지 않고 다시 둘러보기로 했다. 그러는 사이 푸른 얼룩이 벽을 한 뼘 더 타고 올랐다.',
   solved: ITEMS.map(([id, label]) => ({
     text: `투입구 앞에 ${label}을 조심스럽게 가져다 댔다. 넣지는 않았다.\n투입구의 표시등이 [[loud|초록]]으로 켜졌다. 자판기가 낮게 ‘응’ 하고 대답했다.\n맞다. 오늘 밤 이 기계가 받는 것은 ${label}이다.`,
     when: priceIs(id),
@@ -358,7 +474,7 @@ const button: TaskDef = {
       wrongFact: `no-btn-${id}`,
     }),
   ),
-  passStory: '아직 확신이 없다. 답을 걸지 않고 다시 둘러보기로 했다. 그러는 사이 자판기의 불빛이 한 칸 낮아졌다.',
+  passStory: '아직 확신이 없다. 답을 걸지 않고 다시 둘러보기로 했다. 그러는 사이 푸른 얼룩이 벽을 한 뼘 더 타고 올랐다.',
   solved: BUTTONS.map(([id, label]) => ({
     text: `${label} 버튼(${id}) 위에 손바닥을 얹었다. 누르지는 않았다.\n버튼 아래에서 아주 작은 전류 소리가 올라왔다. 누르라는 듯이.\n맞다. 눌러야 할 것은 ${label} 버튼이다.`,
     when: buttonIs(id),
@@ -508,7 +624,7 @@ const change: TaskDef = {
     },
     { id: 'leave', text: '거스름돈에는 손대지 않고, 반환구를 그대로 둔 채 자리를 뜬다', right: true },
   ] satisfies TaskAnswer[],
-  passStory: '아직 확신이 없다. 답을 걸지 않고 다시 둘러보기로 했다. 그러는 사이 자판기의 불빛이 한 칸 낮아졌다.',
+  passStory: '아직 확신이 없다. 답을 걸지 않고 다시 둘러보기로 했다. 그러는 사이 푸른 얼룩이 벽을 한 뼘 더 타고 올랐다.',
   solved:
     '반환구 앞에서 한참 서 있었다. 손을 뻗지 않았다. 뻗고 싶지도 않았다.\n반환구의 뚜껑이 [[whisper|아쉬운 듯]] 천천히 닫혔다.\n맞다. 거스름돈은 받지도, 도로 넣지도 않고 그대로 두고 떠나는 것이다.',
   board: {
@@ -548,7 +664,7 @@ const built = buildTasks({
     { when: { not: { flag: 'voice' } }, to: 'event-voice' },
     { to: 'rest' },
   ],
-  passText: '확신이 없다 — 답을 걸지 않고 더 조사한다 (새벽이 가까워진다)',
+  passText: '확신이 없다 — 답을 걸지 않고 더 조사한다 (오염이 번진다)',
 })
 
 const BAD_FLAGS = ['end-erased', 'end-slot', 'end-debt', 'end-greedy', 'end-dawn']
@@ -561,7 +677,7 @@ const STORY_NODES: Node[] = [
     period: 'night',
     kind: 'story',
     title: '정전',
-    text: '야간 점검 중에 건물 전체가 [[flicker|꺼졌다.]] 비상등마저 들어오지 않았다. 더듬어서 지하 2층 휴게실로 내려왔다.\n문이 등 뒤에서 [[loud|철컥]] 하고 잠겼다. 전자식 도어락이다. 정전 중에는 열리지 않는다.\n어둠 속에서 단 하나, 자판기만 켜져 있다. 불빛이 방 안을 푸르게 물들이고 있다. 주머니에는 낡은 동전, 가족사진, 사원증이 들어 있다.',
+    text: '야간 점검 중에 건물 전체가 [[flicker|꺼졌다.]] 비상등마저 들어오지 않았다. 더듬어서 지하 2층 휴게실로 내려왔다.\n문이 등 뒤에서 [[loud|철컥]] 하고 잠겼다. 전자식 도어락이다. 정전 중에는 열리지 않는다.\n어둠 속에서 단 하나, 자판기만 켜져 있다. 불빛이 방 안을 푸르게 물들이고 있다. [[whisper|물든 자리는 천천히 번지며 어두워진다.]] 방이 전부 물들면 어떻게 되는지는 알 수 없다. 주머니에는 낡은 동전, 가족사진, 사원증이 들어 있다.',
     onEnter: [
       { give: 'coin', to: 'all' },
       { give: 'photo', to: 'all' },
@@ -994,7 +1110,12 @@ export const vending: Scenario = {
     { id: 'button', pick: [...BUTTON_ORDER] },
     { id: 'wires', pick: ['1', '2'] },
   ],
-  clock: { labels: ['자정', '새벽 한 시', '새벽 두 시', '새벽 세 시', '새벽 네 시', '동이 틀 무렵'] },
+  // 시계 이름은 오염 상태를 말한다 (칸이 오를 때마다 한 줄씩). 5칸이 차면 정산이다.
+  clock: {
+    labels: ['아직 깨끗하다', '바닥에 푸른 얼룩이 보인다', '얼룩이 벽을 타고 오른다', '방의 절반이 물들었다', '방이 거의 다 물들었다', '방이 전부 물들었다'],
+    light: true,
+    lightName: '오염',
+  },
   deadline: { time: 5, node: 'bad-end' },
   onAllPanic: 'bad-end',
   start: 'arrive',

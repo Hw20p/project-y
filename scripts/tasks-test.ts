@@ -1,7 +1,8 @@
 // 과제 빌더(src/scenario/tasks.ts) 시험: 과제 순서, 3단계 조사, 오답·패스의 대가, 조명(마감), 끝이 나는지.
 import assert from 'node:assert/strict'
 import { exploreScenario } from '../src/scenario/explore.ts'
-import { tasksDemo as sc, tasksSmall } from '../src/scenario/fixtures/tasks.ts'
+import { chainLockDef, tasksChain, tasksDemo as sc, tasksSmall } from '../src/scenario/fixtures/tasks.ts'
+import { buildTasks } from '../src/scenario/tasks.ts'
 import { createScenarioGame, reduceScenario, type ScenarioAction } from '../src/scenario/game.ts'
 import { partyOf } from '../src/scenario/registry.ts'
 import type { ScenarioGame } from '../src/scenario/state.ts'
@@ -296,4 +297,83 @@ for (const n of [1, 2]) {
   // 2인 선택지: 혼자일 때는 보이지 않아 못 고르는 것이 맞고, 둘 이상이면 고르는 길이 있어야 한다
   assert.equal(r.untakenChoices.includes('lock-probe.pair'), n === 1, `${n}명: 2인 선택지를 ${n === 1 ? '못 고른다' : '고르는 길이 있다'}`)
   console.log(`통과: 전수 탐색 ${n}명 (상태 ${r.states}개, 엔딩 ${JSON.stringify(reach)}, 못 고른 선택지 ${r.untakenChoices.length}개)`)
+}
+
+// 12) 추리 사슬: 빌더가 작성 실수를 잡고, 단계마다 투표하며, 틀리면 그 시도가 끝나고, 끝까지 맞으면 풀린다
+{
+  const def = chainLockDef()
+  assert.throws(() => buildTasks({ tasks: [{ ...def, chain: def.chain!.slice(0, 2) }], after: 'x' }), /3단계 이상/)
+  assert.throws(() => buildTasks({ tasks: [{ ...def, answers: [{ id: 'a', text: 'a', right: true }] }], after: 'x' }), /함께 쓸 수 없다/)
+  assert.throws(() => buildTasks({ tasks: [{ ...def, chain: [{ ...def.chain![0], ok: undefined }, ...def.chain!.slice(1)] }], after: 'x' }), /근거를 보이는 이야기\(ok\)/)
+  const rpt = validateScenario(tasksChain)
+  assert.deepEqual(rpt.errors, [], rpt.errors.join('\n'))
+  assert.deepEqual(rpt.warnings, [], rpt.warnings.join('\n'))
+
+  const cs = (a: ScenarioGame, x: ScenarioAction) => reduceScenario(tasksChain, a, x)
+  const cids = (g: ScenarioGame) => g.run.players.map((p) => p.id)
+  const cready = (g: ScenarioGame) => cids(g).reduce((s, id) => cs(s, { type: 'ready', playerId: id }), g)
+  const cvote = (g: ScenarioGame, choiceId: string) => cids(g).reduce((s, id) => cs(s, { type: 'vote', playerId: id, choiceId }), g)
+  const cview = (g: ScenarioGame) => viewForScenario(tasksChain, g, 'p1')
+  const atThink = (lock: string) => {
+    let g = createScenarioGame(tasksChain, { seed: 1, players: partyOf(2), vars: { order: 'lock', lock } })
+    g = cready(g) // begin
+    g = cready(g) // lock-intro
+    return cids(g).reduce((s, id) => cs(s, { type: 'pick', playerId: id, actionId: 'lock-wait' }), g)
+  }
+
+  // 추리 장면에는 "시작"과 "더 조사"뿐이다
+  const think = atThink('2')
+  assert.equal(think.run.nodeId, 'lock-think')
+  assert.deepEqual(cview(think).scene!.choices.map((c) => c.id), ['lock-reason', 'lock-pass'])
+
+  // 끝까지 맞으면 풀린다 (번호가 2번인 판: 크지 않다 → 2번이다 → 2번)
+  let g = cvote(think, 'lock-reason')
+  assert.equal(g.run.nodeId, 'lock-c1')
+  assert.deepEqual(cview(g).scene!.choices.map((c) => c.id), ['big', 'small'])
+  g = cready(cvote(g, 'small'))
+  assert.equal(g.run.nodeId, 'lock-c2')
+  g = cready(cvote(g, 'two'))
+  assert.equal(g.run.nodeId, 'lock-c3')
+  g = cvote(g, 'n2')
+  assert.equal(g.run.nodeId, 'lock-right')
+  assert.equal(g.run.time, 0)
+  assert.equal(cready(g).run.nodeId, 'finale')
+
+  // 번호가 3번인 판은 같은 단계에서 다른 보기가 맞는다
+  let h = cvote(atThink('3'), 'lock-reason')
+  assert.equal(cvote(h, 'big').run.nodeId, 'lock-c1-ok')
+  assert.equal(cvote(h, 'small').run.nodeId, 'lock-c1-wrong-small-1')
+
+  // 틀리면 그 시도가 거기서 끝난다: 오답의 대가를 치르고 조사로 돌아간다. 첫 번째와 두 번째 이후는 다른 장면이다.
+  const sanity = think.run.players[0].stats.sanity
+  let w = cvote(cready(cvote(cvote(think, 'lock-reason'), 'small')), 'not-two') // 둘째 단계에서 틀렸다
+  assert.equal(w.run.nodeId, 'lock-c2-wrong-not-two-1')
+  assert.equal(w.run.time, 1)
+  for (const p of w.run.players) assert.equal(p.stats.sanity, sanity - 2)
+  w = cready(w)
+  assert.equal(w.run.nodeId, 'lock-probe')
+  assert.ok(cview(w).scene!.choices.some((c) => c.id === 'listen'), '한 번 틀리면 2단계 조사가 열린다')
+  w = cids(w).reduce((s, id) => cs(s, { type: 'pick', playerId: id, actionId: 'lock-wait' }), w)
+  w = cvote(cready(cvote(cvote(w, 'lock-reason'), 'small')), 'not-two')
+  assert.equal(w.run.nodeId, 'lock-c2-wrong-not-two-2')
+  // 마지막 단계의 오답은 그 번호가 아니라고 모두가 알게 된다
+  const last = cvote(cready(cvote(cready(cvote(cvote(think, 'lock-reason'), 'small')), 'two')), 'n1')
+  assert.equal(last.run.nodeId, 'lock-c3-wrong-n1-1')
+  assert.ok(last.run.players.every((p) => p.facts.includes('no-lock-1')))
+
+  // 전수 탐색: 멈추는 곳도 갇히는 곳도 없다
+  const r = exploreScenario(tasksChain, {
+    players: partyOf(1),
+    maxStates: 300000,
+    combos: [
+      { order: 'lock', lock: '2' },
+      { order: 'lock', lock: '3' },
+    ],
+  })
+  assert.deepEqual(r.stuck, [])
+  if (!r.truncated) {
+    assert.deepEqual(r.deadEnds, [])
+    assert.ok(r.endings.find((e) => e.id === 'win')!.reachableCombos > 0, '추리 사슬로 풀어 엔딩에 닿는다')
+  }
+  console.log(`통과: 추리 사슬 (빌더 검증·단계 투표·틀리면 그 시도 종료·전수 탐색 상태 ${r.states}개)`)
 }

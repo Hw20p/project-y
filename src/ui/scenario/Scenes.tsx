@@ -6,6 +6,7 @@ import { useMemo } from 'react'
 import { Appear, Beats, beatSteps, splitBeats, useAdvanceKey, useSequence, useSteps } from '../Narration.tsx'
 import { needMoreChoiceIds, type SceneChoiceView, type ScenarioView } from '../../scenario/view.ts'
 import { Changes, Continue, NewFacts, SkipHint } from './parts.tsx'
+import type { Impact } from './Results.tsx'
 
 type Send = ScenarioClient['send']
 
@@ -59,16 +60,27 @@ function useDigitKeys(enabled: boolean, choices: SceneChoiceView[], pick: (id: s
 
 // ───────────────────────── 이야기 ─────────────────────────
 
-export function StoryScene({ view, send }: { view: ScenarioView; send: Send }) {
+export function StoryScene({ view, send, onImpact }: { view: ScenarioView; send: Send; onImpact?: (i: Impact) => void }) {
   const scene = view.scene!
   const beats = useMemo(() => splitBeats(scene.text), [scene.text])
   const { steps, at } = useSteps(beatSteps(beats), [scene.text])
   const seq = useSequence(steps)
   useAdvanceKey(seq, () => send({ type: 'ready' }))
+  // 추리를 맞힌 장면은 열리자마자 화면이 번쩍이고 효과음이 난다
+  const success = scene.tone === 'success'
+  useEffect(() => {
+    if (success) onImpact?.('success')
+  }, [success, onImpact])
 
   return (
     <section onClick={() => !seq.done && seq.skip()}>
       <Aftermath view={view} />
+      {success && (
+        <p className="success-mark mb-2 inline-flex items-center gap-2 rounded border border-gain/60 bg-gain/10 px-3 py-1 text-sm font-bold tracking-widest text-gain">
+          <span aria-hidden className="text-base">✔</span>
+          맞았다
+        </p>
+      )}
       <Header view={view} />
       <Beats beats={beats} at={at} seq={seq} />
       {seq.done ? <Continue view={view} onClick={() => send({ type: 'ready' })} /> : <SkipHint />}

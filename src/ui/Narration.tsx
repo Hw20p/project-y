@@ -45,12 +45,12 @@ export interface Distort {
 }
 
 export const NO_DISTORT: Distort = { level: 0, glitch: 0 }
-export const DistortContext = createContext<Distort>({ level: 0, glitch: 0.012 })
+export const DistortContext = createContext<Distort>(NO_DISTORT)
 
-/** 정신력이 5 아래로 떨어지면 번짐·갈라짐이 시작되고, 0에 가까울수록 세진다. 글자 하나가 일그러지는 일은 늘 아주 가끔 있다. */
+/** 정신력이 3 이하로 떨어지면 번짐·갈라짐과 글자 하나하나의 일그러짐이 시작되고, 0에 가까울수록 세진다. 정신력이 그보다 높으면 아무 효과도 없다. */
 export function distortAt(sanity: number): Distort {
-  const level = Math.min(1, Math.max(0, (5 - sanity) / 5))
-  return { level, glitch: 0.012 + level * 0.07 }
+  const level = Math.min(1, Math.max(0, (4 - sanity) / 4))
+  return level > 0 ? { level, glitch: 0.012 + level * 0.07 } : NO_DISTORT
 }
 
 /** 글자 일그러짐을 입힐 글자 (공백·문장부호는 건드리지 않는다) */

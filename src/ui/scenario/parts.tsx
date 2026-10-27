@@ -29,7 +29,7 @@ export function ChangeChip({ change, view }: { change: Change; view: ScenarioVie
   const name = (id: string) => view.players.find((p) => p.id === id)?.name ?? id
   switch (change.kind) {
     case 'time':
-      return <Chip tone="amber">{view.light ? '하루가 지났다' : '시간이 흘렀다'} ({view.clockLabel})</Chip>
+      return <Chip tone="amber">{view.light && !view.light.name ? '하루가 지났다' : '시간이 흘렀다'} ({view.clockLabel})</Chip>
     case 'stat':
       return (
         <Chip tone={change.amount > 0 ? 'gain' : 'loss'}>
@@ -66,23 +66,30 @@ export function Changes({ changes, view }: { changes: Change[]; view: ScenarioVi
 
 /**
  * 시계 표시. 시계가 조명인 시나리오는 남은 조명을 막대로 보이고(어두워질수록 붉어지고, 거의 꺼지면 깜빡인다) 상태를 말로 적는다.
- * 아니면 시계 이름만 보인다.
+ * 조명에 이름이 있으면("오염") 줄어드는 대신 차오르는 막대가 된다. 조명이 아닌 막대(`meter`)는 이름이 붙은 푸른 막대다. 아니면 시계 이름만 보인다.
  */
 export function LightMeter({ view }: { view: ScenarioView }) {
-  if (!view.light) {
+  const gauge = view.light ?? view.meter
+  if (!gauge) {
     return <span className="rounded border border-amber/30 px-2 py-0.5 text-amber">{view.clockLabel}</span>
   }
-  const { max } = view.light
-  const left = Math.max(0, max - view.light.level)
+  const meter = view.light ? null : view.meter
+  const name = view.light?.name ?? meter?.name
+  const fills = !!view.light?.name // 수치가 차오르는 막대 (남은 칸이 아니라 찬 칸을 보인다)
+  const { max } = gauge
+  const left = Math.max(0, max - gauge.level)
+  const shown = fills ? gauge.level : left
   const low = left <= 2
+  const calm = name ? { border: 'border-glow/40 text-glow', bar: 'bg-glow' } : { border: 'border-amber/30 text-amber', bar: 'bg-amber' }
   return (
     <span
-      className={`inline-flex items-center gap-2 rounded border px-2 py-0.5 ${low ? 'border-loss/40 text-loss' : 'border-amber/30 text-amber'}`}
-      title={`남은 조명 ${left}/${max}`}
+      className={`inline-flex items-center gap-2 rounded border px-2 py-0.5 ${low ? 'border-loss/40 text-loss' : calm.border}`}
+      title={name ? `${name} ${shown}/${max}` : `남은 조명 ${left}/${max}`}
     >
+      {name && <span className="text-[11px] opacity-80">{name}</span>}
       <span className="flex gap-0.5" aria-hidden>
         {Array.from({ length: max }, (_, i) => (
-          <span key={i} className={`h-3 w-1.5 rounded-sm ${i < left ? (low ? 'bg-loss' : 'bg-amber') : 'bg-edge'}`} />
+          <span key={i} className={`h-3 w-1.5 rounded-sm ${i < shown ? (low ? 'bg-loss' : calm.bar) : 'bg-edge'}`} />
         ))}
       </span>
       <span className={left <= 1 ? 'fx-flicker' : ''}>{view.clockLabel}</span>

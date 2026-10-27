@@ -43,9 +43,19 @@ const toEnd = (g: ScenarioGame) => {
   return g
 }
 
-/** 의도한 답의 선택지 id */
+/** 의도한 답의 선택지 id (받는 것은 추리 사슬이라 `chainRight`가 따로 있다) */
 const rightAnswer = (task: (typeof TASKS)[number], r: Run) =>
-  task === 'item' ? `item-${r.price}` : task === 'button' ? `btn-${r.button}` : 'leave'
+  task === 'item' ? 'item-reason' : task === 'button' ? `btn-${r.button}` : 'leave'
+
+/** 받는 것의 추리 사슬에서 단계마다 맞는 보기: 규칙 → 도는 방향 → 어제 → 오늘 */
+const chainRight = (r: Run) => ['rule-cycle', 'dir-up', `yd-${yesterdayOf(r.price)}`, `item-${r.price}`]
+
+/** 받는 것의 추리를 시작해 `steps`단계까지 맞게 짚는다 (그다음 단계의 투표 장면에서 멈춘다. 0이면 첫 단계 장면) */
+const reasonTo = (g: ScenarioGame, steps: number, r: Run = RUN): ScenarioGame => {
+  g = voteAll(g, 'item-reason')
+  for (let i = 0; i < steps; i++) g = settle(voteAll(g, chainRight(r)[i]))
+  return g
+}
 
 interface Plan {
   hum: 'listen' | 'unplug' | 'ignore'
@@ -68,7 +78,8 @@ function drive(g0: ScenarioGame, until: string, r: Run = RUN, plan: Plan = GOOD)
     else if (n === 'first-look') g = pickEach(g, {}, 'pocket')
     else if (task && n === `${task}-probe`) g = pickEach(g, {}, `${task}-wait`)
     else if (task && n === `${task}-think`) g = voteAll(g, rightAnswer(task, r))
-    else if (task) g = ready(g) // 소개·풀렸다
+    else if (task === 'item' && /^item-c\d$/.test(n)) g = voteAll(g, chainRight(r)[Number(n.slice(-1)) - 1]) // 추리 사슬의 단계
+    else if (task) g = ready(g) // 소개·풀렸다·사슬의 근거 이야기
     else if (n === 'event-hum') g = voteAll(g, plan.hum)
     else if (n === 'event-voice') g = voteAll(g, plan.voice)
     else if (n === 'rest') g = pickEach(g, {}, 'coffee')
@@ -221,11 +232,13 @@ function trade(g: ScenarioGame, put: string, press: string, change: string): Sce
   let g = start(2, r)
   for (const node of ['arrive', 'first-look', 'item-intro']) g = node === 'first-look' ? settle(pickEach(g, {}, 'pocket')) : ready(g)
   g = settle(pickEach(g, {}, 'item-wait'))
-  assert.equal(view(g).light, null, '자판기의 시계는 조명이 아니다')
+  assert.deepEqual(view(g).light, { max: 5, level: 0, name: '오염' }, '자판기의 시계는 "오염"이라는 이름의 조명 수치다')
+  assert.equal(view(g).meter, null)
   const sanity = g.run.players[0].stats.sanity
-  const wrong = voteAll(g, 'item-badge')
+  const wrong = voteAll(reasonTo(g, 3), 'item-badge') // 마지막 단계에서 틀렸다
   assert.equal(wrong.run.time, 1)
-  assert.equal(view(wrong).clockLabel, '새벽 한 시')
+  assert.equal(view(wrong).clockLabel, '바닥에 푸른 얼룩이 보인다')
+  assert.equal(view(wrong).light!.level, 1, '오답으로 오염이 한 칸 오른다')
   for (const p of wrong.run.players) assert.equal(p.stats.sanity, sanity - 2)
   assert.ok(wrong.run.players.every((p) => p.facts.includes('no-item-badge')), '오답이었음을 모두가 안다')
   const passed = voteAll(g, 'item-pass')
@@ -291,7 +304,7 @@ function trade(g: ScenarioGame, put: string, press: string, change: string): Sce
   c = settle(pickEach(c, {}, 'item-wait'))
   c = structuredClone(c)
   for (const p of c.run.players) p.stats.sanity = 2
-  c = voteAll(c, 'item-badge')
+  c = voteAll(reasonTo(c, 3), 'item-badge')
   assert.equal(c.run.endingId, 'bad-end')
   assert.match(view(c).ending!.text, /더는 일어설 수 없었다/)
   console.log('통과: 시계가 끝나면 정산, 정신을 모두 잃으면 정신 상실')
@@ -334,7 +347,7 @@ function trade(g: ScenarioGame, put: string, press: string, change: string): Sce
   const r: Run = { ...RUN, order: 'item>button>change' } // 오늘 받는 것은 낡은 동전, 어제는 사원증
   let g = start(2, r)
   for (const node of ['arrive', 'first-look', 'item-intro']) g = node === 'first-look' ? settle(pickEach(g, {}, 'pocket')) : ready(g)
-  g = voteAll(pickEach(g, {}, 'item-wait'), 'item-badge') // 사원증이라고 걸었다가 틀렸다
+  g = voteAll(reasonTo(pickEach(g, {}, 'item-wait'), 3), 'item-badge') // 사원증이라고 걸었다가 틀렸다
   g = settle(g)
   assert.equal(g.run.nodeId, 'item-night')
   // 어제 받은 것(사원증)이 아니라는 것은 오답으로 이미 밝혀졌으므로 "투입구 소리" 선택지는 숨는다
@@ -374,4 +387,82 @@ function trade(g: ScenarioGame, put: string, press: string, change: string): Sce
   const cover = voteAll(settle(c), 'cover')
   assert.ok(cover.run.players.every((p) => p.facts.includes('change-no-cover')))
   console.log('통과: 위험한 곳(자판기)과 거스름돈의 새 오답')
+}
+
+// 13) 받는 것의 추리 사슬: 추리 장면은 "시작 / 더 조사" 둘뿐이고, 단계마다 근거가 밝혀지며, 틀리면 그 시도가 거기서 끝난다
+{
+  const r: Run = { ...RUN, order: 'item>button>change' } // 오늘 받는 것은 낡은 동전, 어제는 사원증
+  const text = (g: ScenarioGame) => view(g).scene!.text
+  /** 받는 것의 조사를 마치고 추리 장면에 선 상태 */
+  const atThink = (picks: Record<number, string>) => {
+    let g = start(2, r)
+    for (const node of ['arrive', 'first-look', 'item-intro']) g = node === 'first-look' ? settle(pickEach(g, {}, 'pocket')) : ready(g)
+    return settle(pickEach(g, picks, 'item-wait'))
+  }
+
+  // 추리 장면에는 둘뿐이고, 시작하면 4단계 사슬이 이어진다
+  const blind = atThink({})
+  assert.equal(blind.run.nodeId, 'item-think')
+  assert.deepEqual(choiceIds(blind), ['item-reason', 'item-pass'])
+  let g = voteAll(blind, 'item-reason')
+  assert.equal(g.run.nodeId, 'item-c1')
+  assert.deepEqual(choiceIds(g), ['rule-cycle', 'rule-random', 'rule-same', 'rule-price'])
+  assert.equal(view(g).scene!.title, '받는 것 · 추리 1/4')
+  // 단서 없이 맞히면 근거가 아니라 감이었다고 밝혀진다. 맞게 짚는 동안 시계는 그대로다.
+  g = voteAll(g, 'rule-cycle')
+  assert.equal(g.run.nodeId, 'item-c1-ok')
+  assert.match(text(g), /근거 없이 감이 닿았을 뿐/)
+  g = settle(g)
+  assert.equal(g.run.nodeId, 'item-c2')
+  assert.equal(g.run.time, 0)
+
+  // 단서를 얻었으면 그 단서가 근거로 밝혀지고, 끝까지 맞으면 풀린다
+  const informed = atThink({ 0: 'graffiti', 1: 'receipt' })
+  assert.equal(informed.run.nodeId, 'item-think')
+  let h = voteAll(voteAll(informed, 'item-reason'), 'rule-cycle')
+  assert.match(text(h), /낙서가 근거였다/)
+  h = voteAll(settle(h), 'dir-up')
+  assert.match(text(h), /가벼운 것에서 소중한 것으로/)
+  h = voteAll(settle(h), 'yd-badge')
+  assert.match(text(h), /영수증이 근거였다/)
+  assert.match(text(h), /어제 자판기가 받은 것은 사원증이다/)
+  h = voteAll(settle(h), 'item-coin')
+  assert.equal(h.run.nodeId, 'item-right')
+  assert.match(text(h), /그다음 차례는 낡은 동전이다/)
+  assert.match(text(h), /맞다\. 오늘 밤 이 기계가 받는 것은 낡은 동전이다/)
+
+  // 의도한 풀이는 사슬의 모든 장면을 거친다
+  const solved = drive(start(2, r), 'trade-item', r)
+  for (const id of ['item-reason', 'item-c1', 'item-c1-ok', 'item-c2', 'item-c2-ok', 'item-c3', 'item-c3-ok', 'item-c4', 'item-right']) {
+    if (id !== 'item-reason') assert.ok(solved.run.visited.includes(id), id)
+  }
+
+  // 틀리면 그 시도가 거기서 끝난다: 오답의 대가(시계·정신력)와 밤이 이어진다
+  const s0 = blind.run.players[0].stats.sanity
+  let w = voteAll(voteAll(blind, 'item-reason'), 'rule-random')
+  assert.equal(w.run.nodeId, 'item-c1-wrong-rule-random-1')
+  assert.equal(w.run.time, 1)
+  for (const p of w.run.players) assert.equal(p.stats.sanity, s0 - 2)
+  w = settle(w)
+  assert.equal(w.run.nodeId, 'item-night')
+  // 틀린 시도도 패스처럼 조사 선택지를 한 단계 연다 (두 번째 이후는 다른 장면이고 3단계까지 열린다)
+  w = settle(pickEach(w, {}, 'coffee'))
+  assert.equal(w.run.nodeId, 'item-probe')
+  assert.ok(choiceIds(w).includes('slot') && !choiceIds(w).includes('ledger'), '한 번 틀리면 2단계 조사')
+  w = settle(pickEach(w, {}, 'item-wait'))
+  w = voteAll(reasonTo(w, 1), 'dir-down') // 첫 단계는 맞고 둘째 단계에서 틀렸다
+  assert.equal(w.run.nodeId, 'item-c2-wrong-dir-down-2')
+  assert.equal(w.run.time, 2)
+  w = settle(pickEach(settle(w), {}, 'coffee'))
+  assert.ok(choiceIds(w).includes('ledger'), '두 번 틀리면 3단계 조사')
+
+  // 마지막 단계에서 틀리면 그 답이 아니라고 모두가 알게 되고, 다음 시도의 질문에 덧붙는다
+  let q = voteAll(reasonTo(blind, 3), 'item-badge')
+  assert.ok(q.run.players.every((p) => p.facts.includes('no-item-badge')))
+  q = settle(pickEach(settle(q), {}, 'coffee'))
+  q = settle(pickEach(q, {}, 'item-wait'))
+  q = reasonTo(q, 3)
+  assert.equal(q.run.nodeId, 'item-c4')
+  assert.match(text(q), /사원증은 이미 아니라고 밝혀졌다/)
+  console.log('통과: 받는 것의 추리 사슬 (4단계·근거 이야기·틀리면 그 시도 종료)')
 }

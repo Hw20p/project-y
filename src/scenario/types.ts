@@ -127,6 +127,8 @@ interface NodeBase {
 export interface StoryNode extends NodeBase {
   kind: 'story'
   text: Text
+  /** 'success'면 화면이 "맞았다" 표시와 번쩍임·효과음으로 성공을 알린다 (추리를 맞힌 장면에 쓴다) */
+  tone?: 'success'
   next: Route
 }
 
@@ -325,8 +327,12 @@ export interface Scenario {
    * `byDay`: 밤에서 낮으로 넘어갈 때(하루가 지날 때) 시계가 자동으로 1 흐른다. 장면의 `period`를 정해 둔 시나리오가 쓴다.
    * 이때 며칠째인지는 시계 값에서 나오고(시계 + 1일째), 성공했든 실패했든 하루가 지나면 조명이 똑같이 어두워진다.
    * `deadline.time`은 언제나 시계 값 기준이다.
+   * `lightName`: `light`와 함께 쓴다. 있으면 막대가 "남은 조명"이 아니라 이 이름의 수치("오염")로, 줄어드는 대신 **차오르는** 모양으로 보인다.
+   * 화면이 어두워지는 연출은 조명과 똑같다 (수치가 오를수록 어둡다).
+   * `meter`: 조명이 아니어도 마감까지 남은 칸을 막대로 보인다. 값은 막대 옆에 붙는 이름("남은 밤"). 화면은 어두워지지 않는다.
+   * 마감 `deadline`이 있어야 하고 `light`와 함께 쓸 수 없다.
    */
-  clock: { labels: string[]; light?: boolean; per?: number; byDay?: boolean }
+  clock: { labels: string[]; light?: boolean; lightName?: string; per?: number; byDay?: boolean; meter?: string }
   /** 시계가 이 값에 닿으면 (엔딩이 아닌 장면으로 가려 할 때) 대신 이 엔딩으로 간다 */
   deadline?: { time: number; node: string }
   /** 파티 전원이 부상이 되면 이 엔딩으로 간다 */

@@ -14,7 +14,7 @@ import { LightMeter, myClues, ScenarioParty } from './parts.tsx'
 import { ScenarioResultPanel, type Impact } from './Results.tsx'
 import { ChoiceScene, PersonalScene, StoryScene } from './Scenes.tsx'
 
-const SOUND_OF = { death: 'death', fragment: 'fragment', item: 'item', good: 'good', bad: 'bad' } as const
+const SOUND_OF = { death: 'death', fragment: 'fragment', item: 'item', good: 'good', bad: 'bad', success: 'good' } as const
 
 /** 결과 하나를 "지난 기록"의 한 줄로 */
 function toJournal(view: ScenarioView): JournalEntry | null {
@@ -107,6 +107,14 @@ export function ScenarioScreen({
     lastLevel.current = lightLevel
   }, [lightLevel, view.light])
 
+  // 조명이 아닌 시계("남은 밤")가 한 칸 흐르는 순간: 새벽이 가까워지는 소리 (처음 열 때나 새 판으로 되돌아갈 때는 소리 없이)
+  const meterLevel = view.meter?.level ?? 0
+  const lastMeter = useRef(meterLevel)
+  useEffect(() => {
+    if (meterLevel > lastMeter.current) playSfx('dawn')
+    lastMeter.current = meterLevel
+  }, [meterLevel])
+
   // 낮과 밤이 바뀌는 순간 (처음 열 때는 소리 없이)
   const period = view.timeOfDay?.period ?? null
   const lastPeriod = useRef(period)
@@ -163,6 +171,10 @@ export function ScenarioScreen({
       {view.light && !ended && (
         // 조명이 어두워질수록 화면 가장자리부터 깊게 가라앉는다
         <div className="light-dim" style={{ opacity: darkness }} aria-hidden />
+      )}
+      {view.meter && !ended && (
+        // 새벽이 가까울수록 화면 아래에서 희끄무레한 빛이 차오른다 (정산이 다가온다)
+        <div className="dawn-glow" style={{ opacity: meterLevel / view.meter.max }} aria-hidden />
       )}
       {blink > 0 && <div key={blink} className="light-blink" aria-hidden />}
       {impact && <div key={impact.id} className={`impact impact-${impact.kind}`} aria-hidden />}
@@ -255,7 +267,7 @@ export function ScenarioScreen({
         )}
 
         <main className="mt-2">
-          {view.phase === 'story' && view.scene && <StoryScene key={sceneKey} view={view} send={send} />}
+          {view.phase === 'story' && view.scene && <StoryScene key={sceneKey} view={view} send={send} onImpact={onImpact} />}
           {(view.phase === 'vote' || view.phase === 'split') && view.scene && (
             <ChoiceScene key={sceneKey} view={view} send={send} reading={reading} />
           )}
