@@ -65,8 +65,12 @@ function drive(g0: ScenarioGame, until: string, seat: SeatId, stairs: StairsCoun
   return g
 }
 
-const start = (n: number, order: string, seat: SeatId, stairs: StairsCount) =>
-  createScenarioGame(sc, { seed: 1, players: partyOf(n), vars: { order, seat, stairs } })
+/** 위험한 곳이 아무 조사에도 걸리지 않는 값 (기본). 위험한 곳 시험(13)만 특정 조사를 고른다. */
+const NO_RISK = { 'risk-lift': 'off', 'risk-sofa': 'off', 'risk-stairs': 'off' }
+
+/** `extra`로 사건 순서(events)나 위험한 곳(risk-<과제>)을 정할 수 있다. 기본은 발소리가 먼저이고 위험한 곳이 없다. */
+const start = (n: number, order: string, seat: SeatId, stairs: StairsCount, extra: Record<string, string> = {}) =>
+  createScenarioGame(sc, { seed: 1, players: partyOf(n), vars: { order, seat, stairs, events: 'fp', ...NO_RISK, ...extra } })
 
 /** 마지막 선택에서 엘리베이터를 골라 `lift`까지 간 뒤, 엘리베이터 앞에서 각자 행동한다 */
 function atLift(n: number, order: string, seat: SeatId, stairs: StairsCount, plan: Plan = GOOD) {
@@ -109,7 +113,8 @@ const endingOf = (g: ScenarioGame) => toEnd(g).run.endingId
         for (const stairs of STAIRS) {
           const g = liftActions(atLift(n, order, seat, stairs), seat, { greet: 'right', lift: 'still' })
           assert.equal(g.run.nodeId, 'ascend-true', `${n}명 ${order} seat=${seat} stairs=${stairs}`)
-          assert.equal(g.run.time, 0, '풀기만 하면 조명은 그대로다')
+          assert.equal(g.run.time, 2, '풀어도 하루는 지난다: 밤이 두 번 지나 3일째다')
+          assert.deepEqual(view(g).light, { max: 4, level: 1 }, '3일째이므로 조명은 한 번 어두워졌다 (2일째에 어두워졌다)')
           assert.equal(endingOf(g), 'true-end')
           assert.equal(view(toEnd(g)).ending?.tier, 'true')
           games++
@@ -186,9 +191,9 @@ const endingOf = (g: ScenarioGame) => toEnd(g).run.endingId
   assert.equal(g.run.nodeId, 'lift-think')
   const sanity = g.run.players[0].stats.sanity
   g = voteAll(g, 'once')
-  assert.equal(g.run.time, 1, '오답이면 하루가 지난다')
-  assert.equal(view(g).clockLabel, '조명이 환하다', '조명은 이틀마다 한 단계 어두워진다 (아직 첫 단계)')
-  for (const p of g.run.players) assert.equal(p.stats.sanity, sanity - 2, '정신력도 깎인다')
+  assert.equal(g.run.time, 0, '오답을 골라도 하루가 저물기 전에는 시계가 그대로다 (시계는 밤이 지나 새 낮이 올 때 흐른다)')
+  assert.equal(view(g).clockLabel, '조명이 환하다')
+  for (const p of g.run.players) assert.equal(p.stats.sanity, sanity - 2, '정신력은 깎인다')
   // 오답 뒤에는 밤이 온다: 이 과제의 개인 선택지(단서·아이템)와 스텟 선택지가 나온다
   g = settle(g)
   assert.equal(g.run.nodeId, 'lift-night')
@@ -196,16 +201,27 @@ const endingOf = (g: ScenarioGame) => toEnd(g).run.endingId
   assert.deepEqual(view(g).scene!.choices.map((c) => c.id), ['listen', 'scrawl', 'drawer', 'train-body', 'study', 'rest'])
   g = settle(pickEach(g, {}, 'train-body'))
   assert.equal(g.run.nodeId, 'lift-probe', '밤이 끝나면 같은 과제의 조사로 돌아온다')
+  assert.equal(g.run.time, 1, '1일째가 지나고 2일째 낮이 되었다')
+  assert.deepEqual(view(g).timeOfDay, { day: 2, period: 'day' })
+  assert.equal(view(g).clockLabel, '조명이 깜빡인다', '2일째에 조명이 한 번 어두워진다')
+  assert.deepEqual(view(g).light, { max: 4, level: 1 })
   assert.deepEqual(view(g).scene!.choices.map((c) => c.id), ['press', 'still', 'pair', 'lift-wait'], '2단계 조사가 열리고 1단계는 이미 살폈다')
-  // 패스도 하루를 보내고 밤이 온다. 정신력은 깎지 않는다. 이틀째가 되면 조명이 한 단계 어두워진다.
+  // 패스도 하루를 보내고 밤이 온다. 정신력은 깎지 않는다. 3일째는 그대로, 4일째에 다시 어두워진다.
   g = pickEach(g, {}, 'lift-wait')
   const s2 = g.run.players[0].stats.sanity
   g = voteAll(g, 'lift-pass')
-  assert.equal(g.run.time, 2)
+  assert.equal(g.run.time, 1, '패스해도 하루가 저물기 전에는 시계가 그대로다')
   assert.equal(g.run.players[0].stats.sanity, s2, '패스는 정신력을 깎지 않는다')
-  assert.equal(view(g).clockLabel, '조명이 깜빡인다')
-  assert.deepEqual(view(g).light, { max: 4, level: 1 })
-  console.log('통과: 오답·패스의 대가(하루, 이틀에 한 단계 조명)와 밤')
+  g = settle(pickEach(settle(g), {}, 'rest'))
+  assert.equal(g.run.nodeId, 'lift-probe')
+  assert.deepEqual(view(g).timeOfDay, { day: 3, period: 'day' })
+  assert.equal(view(g).clockLabel, '조명이 깜빡인다', '3일째에는 조명이 그대로다')
+  g = voteAll(pickEach(g, {}, 'lift-wait'), 'lift-pass')
+  g = settle(pickEach(settle(g), {}, 'rest'))
+  assert.deepEqual(view(g).timeOfDay, { day: 4, period: 'day' })
+  assert.equal(view(g).clockLabel, '조명이 흐려진다', '4일째에 조명이 또 한 번 어두워진다')
+  assert.deepEqual(view(g).light, { max: 4, level: 2 })
+  console.log('통과: 오답·패스의 대가(정신력)와 밤, 이틀에 한 번 어두워지는 조명')
 }
 
 // 6) 흔한 실수는 의도한 결말로 이어진다
@@ -227,9 +243,11 @@ const endingOf = (g: ScenarioGame) => toEnd(g).run.endingId
   const seat: SeatId = 'a'
   const lift = atLift(3, ORDERS[0], seat, 9)
   const before = lift.run.players.map((p) => p.stats.sanity)
+  const t0 = lift.run.time
   let g = liftActions(lift, seat, { greet: 'right', lift: 'press' })
   assert.equal(g.run.nodeId, 'press-fail')
-  assert.equal(g.run.time, 1, '조명이 한 단계 어두워졌다')
+  assert.equal(g.run.time, t0 + 1, '시간이 한참 흘러 하루가 더 지났다')
+  assert.equal(view(g).light!.level, view(lift).light!.level + 1, '조명이 한 단계 어두워졌다')
   assert.deepEqual(g.run.players.map((p) => p.stats.sanity), before.map((x) => Math.max(0, x - 2)))
   assert.ok(g.run.players.some((p) => p.hurt), '누른 사람이 다쳤다')
   g = ready(g)
@@ -264,7 +282,7 @@ const endingOf = (g: ScenarioGame) => toEnd(g).run.endingId
   assert.equal(endingOf(sign), 'bad-end')
   assert.match(view(toEnd(sign)).ending!.text, /서명이 수십 줄/)
 
-  // 패스를 계속하면 조명이 꺼진다
+  // 패스를 계속하면 조명이 꺼진다 (패스마다 하루가 지난다)
   let dark = start(2, ORDERS[0], 'a', 9)
   for (let i = 0; i < 160 && dark.run.phase !== 'ended'; i++) {
     const n = dark.run.nodeId
@@ -276,7 +294,7 @@ const endingOf = (g: ScenarioGame) => toEnd(g).run.endingId
     else dark = ready(dark)
   }
   assert.equal(dark.run.endingId, 'bad-end')
-  assert.equal(dark.run.time, 8, '패스를 여덟 번 하면(여드레째) 암전')
+  assert.equal(dark.run.time, 7, '하루가 일곱 번 지나면(여드레째) 암전')
   assert.match(view(dark).ending!.text, /조명이 완전히 꺼졌다/)
 
   // 오답을 계속 고르면 정신을 잃는다 (정신력 6, 오답마다 −2)
@@ -351,4 +369,76 @@ const endingOf = (g: ScenarioGame) => toEnd(g).run.endingId
   const solvedNight = drive(start(2, ORDERS[0], 'a', 9), 'night', 'a', 9)
   assert.deepEqual(choiceIds(solvedNight), ['train-body', 'study', 'rest'])
   console.log('통과: 오답 뒤의 밤(단서·아이템·숨김)과 푼 뒤의 스텟 밤')
+}
+
+// 12) 성공해도 하루는 지난다: 과제를 풀 때마다 밤이 지나 시계가 흐르고, 2일째·4일째에 조명이 한 번씩 어두워진다
+{
+  const tasks = ORDERS[0].split('>')
+  let g = start(2, ORDERS[0], 'a', 9)
+  g = drive(g, `${tasks[0]}-intro`, 'a', 9)
+  assert.deepEqual(view(g).timeOfDay, { day: 1, period: 'day' })
+  assert.deepEqual(view(g).light, { max: 4, level: 0 })
+  assert.equal(view(g).clockLabel, '조명이 환하다')
+  g = drive(g, `${tasks[1]}-intro`, 'a', 9) // 첫 과제를 풀고 사건·밤을 지났다
+  assert.deepEqual(view(g).timeOfDay, { day: 2, period: 'day' })
+  assert.deepEqual(view(g).light, { max: 4, level: 1 }, '틀린 적이 없어도 2일째에 조명이 어두워진다')
+  assert.equal(view(g).clockLabel, '조명이 깜빡인다')
+  assert.ok(g.run.aftermath.some((c) => c.kind === 'time'), '새 낮이 오면 "하루가 지났다"가 여파로 보인다')
+  g = drive(g, `${tasks[2]}-intro`, 'a', 9)
+  assert.deepEqual(view(g).timeOfDay, { day: 3, period: 'day' })
+  assert.deepEqual(view(g).light, { max: 4, level: 1 }, '3일째에는 그대로다')
+  console.log('통과: 성공해도 하루가 지나고 조명은 2일째에 어두워진다')
+}
+
+// 13) 사건 순서는 판마다 다르다: events=ph면 전화가 먼저, 발소리가 나중이다. 어느 쪽이든 두 사건을 한 번씩 겪고 같은 진엔딩에 닿는다.
+{
+  const order = ORDERS[0]
+  const g = drive(start(2, order, 'a', 9, { events: 'ph' }), 'night', 'a', 9)
+  const v = g.run.visited
+  assert.ok(v.indexOf('phone-call') >= 0 && v.indexOf('phone-call') < v.indexOf('night'), '첫 과제 뒤에 전화')
+  const end = liftActions(drive(start(2, order, 'a', 9, { events: 'ph' }), 'lift', 'a', 9), 'a', { greet: 'right', lift: 'still' })
+  assert.equal(endingOf(end), 'true-end')
+  const all = drive(start(2, order, 'a', 9, { events: 'ph' }), 'gather', 'a', 9).run.visited
+  assert.ok(all.indexOf('phone-call') < all.indexOf('event-footsteps'), '전화 → 발소리 순서')
+  assert.equal(all.filter((x) => x === 'phone-call' || x === 'event-footsteps').length, 2, '두 사건을 한 번씩')
+  console.log('통과: 사건 순서가 판마다 다르고 진엔딩은 그대로다')
+}
+
+// 14) 위험한 곳: 뽑힌 곳을 살피면 발견은 그대로 얻되 이야기와 대가를 치르고, 다른 곳은 평범하다. 다친 사람은 몸을 쓰는 조사를 못 한다.
+{
+  // 엘리베이터: 패널이 위험한 곳이면 패널을 읽은 사람만 정신력 −3 (거울은 평범)
+  let g = start(2, 'lift>sofa>stairs', 'b', 11, { 'risk-lift': 'panel' })
+  for (const node of ['arrive', 'first-look', 'lift-intro']) g = node === 'first-look' ? settle(pickEach(g, {}, 'desk')) : ready(g)
+  const s0 = g.run.players.map((p) => p.stats.sanity)
+  g = pickEach(g, { 0: 'panel', 1: 'glance' }, 'lift-wait')
+  assert.equal(g.run.players[0].stats.sanity, s0[0] - 3, '위험한 곳을 읽은 사람은 정신력을 잃는다')
+  assert.equal(g.run.players[1].stats.sanity, s0[1], '평범한 곳은 대가가 없다')
+  assert.ok(g.run.players[0].facts.includes('lift-panel-press'), '위험해도 단서는 그대로 얻는다')
+  assert.match(view(g, 'p1').result!.mine!.text, /안쪽에서/, '위험한 곳의 이야기가 붙는다')
+  assert.doesNotMatch(view(g, 'p2').result!.mine!.text, /안쪽에서/, '평범한 곳에는 붙지 않는다')
+
+  // 소파: 쪽지 틈이 위험한 곳이면 다친다. 다친 사람은 몸을 쓰는 조사(소파 틈·만져 보기)를 못 하지만 읽는 조사는 한다.
+  let s = start(2, 'sofa>lift>stairs', 'a', 9, { 'risk-sofa': 'memo-sofa' })
+  for (const node of ['arrive', 'first-look', 'sofa-intro']) s = node === 'first-look' ? settle(pickEach(s, {}, 'desk')) : ready(s)
+  s = pickEach(s, { 0: 'memo-sofa', 1: 'notice' }, 'sofa-wait')
+  assert.deepEqual(s.run.players.map((p) => p.hurt), [true, false])
+  assert.ok(s.run.players[0].facts.includes('note-a-sofa'))
+  s = settle(s)
+  s = voteAll(s, 'sofa-pass') // 패스: 하루가 지나고 밤이 온다
+  s = settle(pickEach(settle(s), {}, 'rest')) // 쉬면서 부상이 낫는다
+  assert.equal(s.run.nodeId, 'sofa-probe')
+  assert.equal(s.run.players[0].hurt, false, '밤에 쉬면 부상이 낫는다')
+  console.log('통과: 위험한 곳(대가·이야기·단서는 그대로·부상)')
+}
+
+// 15) 위험한 곳은 판마다 다른 조사로 뽑힌다 (시드마다 달라진다) — 과제마다 뽑을 수 있는 조사가 둘 이상이다
+{
+  const picks = new Set<string>()
+  for (let seed = 1; seed <= 40; seed++) {
+    const g = createScenarioGame(sc, { seed, players: partyOf(2) })
+    picks.add(`${g.run.vars['risk-lift']}|${g.run.vars['risk-sofa']}|${g.run.vars['risk-stairs']}`)
+    for (const t of TASKS) assert.ok(typeof g.run.vars[`risk-${t}`] === 'string', `${t}에 위험한 곳이 정해진다`)
+  }
+  assert.ok(picks.size > 3, '판마다 위험한 곳이 달라진다')
+  console.log(`통과: 위험한 곳이 판마다 달라진다 (40판에서 ${picks.size}가지)`)
 }

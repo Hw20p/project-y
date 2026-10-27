@@ -34,8 +34,10 @@ const pickEach = (g: ScenarioGame, picks: Record<number, string>, fallback: stri
 const view = (g: ScenarioGame, id = 'p1') => viewForScenario(sc, g, id)
 const choiceIds = (g: ScenarioGame, id = 'p1') => view(g, id).scene!.choices.map((c) => c.id)
 
-const start = (n: number, r: Run = RUN) =>
-  createScenarioGame(sc, { seed: 1, players: partyOf(n), vars: { order: r.order, price: r.price, button: r.button, wires: r.wires } })
+/** 위험한 곳이 아무 조사에도 걸리지 않는 값 (위험한 곳 시험(15)만 특정 조사를 고른다) */
+const NO_RISK = { 'risk-item': 'off', 'risk-button': 'off', 'risk-change': 'off' }
+const start = (n: number, r: Run = RUN, extra: Record<string, string> = {}) =>
+  createScenarioGame(sc, { seed: 1, players: partyOf(n), vars: { order: r.order, price: r.price, button: r.button, wires: r.wires, ...NO_RISK, ...extra } })
 const toEnd = (g: ScenarioGame) => {
   for (let i = 0; i < 4 && g.run.phase !== 'ended'; i++) g = settle(g)
   return g
@@ -347,4 +349,29 @@ function trade(g: ScenarioGame, put: string, press: string, change: string): Sce
   // 과제를 푼 뒤의 휴식에는 스텟 선택지뿐이다
   assert.deepEqual(choiceIds(drive(start(2), 'rest')), ['coffee', 'study'])
   console.log('통과: 오답 뒤의 밤(단서·아이템·숨김)과 푼 뒤의 휴식')
+}
+
+// 12) 위험한 곳: 뽑힌 조사를 살핀 사람만 대가를 치르고 단서는 그대로 얻는다. 다친 사람은 몸을 쓰는 조사를 못 한다.
+{
+  const r: Run = { ...RUN, order: 'item>button>change' }
+  // 받는 것: 영수증이 위험한 곳이면 읽은 사람만 다친다 (그래도 어제 거래는 알아낸다)
+  let g = start(2, r, { 'risk-item': 'receipt' })
+  for (const node of ['arrive', 'first-look', 'item-intro']) g = node === 'first-look' ? settle(pickEach(g, {}, 'pocket')) : ready(g)
+  g = pickEach(g, { 0: 'receipt', 1: 'graffiti' }, 'item-wait')
+  assert.deepEqual(g.run.players.map((p) => p.hurt), [true, false])
+  assert.ok(g.run.players[0].facts.includes('yday-coin'))
+  assert.match(view(g, 'p1').result!.mine!.text, /글자가 잉크처럼 번져/)
+
+  // 거스름돈: 위험한 곳은 정신력 −3 (낙서를 읽은 사람만)
+  let c = start(2, { ...RUN, order: 'change>item>button' }, { 'risk-change': 'wall' })
+  for (const node of ['arrive', 'first-look', 'change-intro']) c = node === 'first-look' ? settle(pickEach(c, {}, 'pocket')) : ready(c)
+  const s0 = c.run.players.map((p) => p.stats.sanity)
+  c = pickEach(c, { 0: 'wall', 1: 'tray-paper' }, 'change-wait')
+  assert.equal(c.run.players[0].stats.sanity, s0[0] - 3)
+  assert.equal(c.run.players[1].stats.sanity, s0[1])
+
+  // 거스름돈의 답에 "막는다"가 더해졌고, 틀린 답이며 모두가 알게 된다
+  const cover = voteAll(settle(c), 'cover')
+  assert.ok(cover.run.players.every((p) => p.facts.includes('change-no-cover')))
+  console.log('통과: 위험한 곳(자판기)과 거스름돈의 새 오답')
 }

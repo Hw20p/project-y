@@ -6,6 +6,7 @@
 //                                    └ 오답 / 패스 → 조사로 돌아간다. 이번에는 전에 없던 조사 선택지가 열려 있다.
 // 오답은 정신력과 조명(시계)을 깎고 그 답이 지워진다. 패스는 조명만 깎는다. 오답이 지워지므로 언제든 끝이 난다.
 // 조사 선택지는 3단계로 쌓인다: 처음에는 1단계만, 오답·패스가 한 번이면 2단계까지, 두 번 이상이면 3단계까지 열린다.
+// 위험한 곳: `risk`가 있는 조사 중 하나가 판마다 무작위로 "위험한 곳"으로 뽑힌다. 거기를 살핀 사람은 발견은 그대로 얻되 이야기와 대가(`hazard`)를 치른다.
 import type { Cond, Effect, Node, PersonalOption, PersonalStep, PrivateFinding, QuestionDef, Route, Text, VarSpec } from './types.ts'
 
 export interface TaskProbe {
@@ -28,6 +29,13 @@ export interface TaskProbe {
    * 혼자(또는 할 수 있는 사람이 `min`명보다 적을 때)는 선택지가 보이지 않으므로, 같은 정보를 혼자 얻는 다른 조사를 따로 둔다.
    */
   min?: number
+  /**
+   * 이 곳이 이번 판의 "위험한 곳"으로 뽑히면 살핀 사람이 겪는 이야기 (발견 글 뒤에 붙는다). 과제의 `hazard`(대가)도 함께 치른다.
+   * 위험한 곳은 판마다 `risk`가 있는 조사 중 하나가 뽑히므로 어디가 위험한지 외워서는 알 수 없다. 과제 안에 둘 이상 있어야 한다.
+   */
+  risk?: Text
+  /** true면 부상자는 이 조사를 할 수 없다 (몸을 쓰는 조사) */
+  needsHealthy?: boolean
 }
 
 export interface TaskAnswer {
@@ -65,6 +73,8 @@ export interface TaskDef {
   failCost?: Effect[]
   /** 패스 대가 (기본: 조명 +1) */
   passCost?: Effect[]
+  /** 위험한 곳(`TaskProbe.risk`)을 살폈을 때 그 사람이 치르는 대가 (대상은 `actor`). `risk`가 있는 조사가 있으면 꼭 필요하다. */
+  hazard?: Effect[]
   /** 조사 보드의 의문: 관련 사실들과 풀렸을 때 적힐 답 */
   board: { text: string; facts: string[]; answer: Text }
   /** 이 과제의 장면들이 낮인지 밤인지 (비우면 앞 장면의 시간대를 이어받는다) */
@@ -92,13 +102,18 @@ export interface TasksSpec {
   nightCommon?: PersonalOption[]
   /** 풀이 순서를 뽑는 무작위 값의 이름 (기본 `order`) */
   orderVar?: string
+  /**
+   * 시나리오의 `clock.byDay`와 짝이다: 시계는 밤에서 낮으로 넘어갈 때 자동으로 흐르므로 오답·패스의 기본 대가에서 시간을 뺀다.
+   * 그래서 모든 과제에 오답·패스 뒤의 밤(`night`)이 있어야 한다.
+   */
+  dayClock?: boolean
 }
 
 export interface TasksBuilt {
   /** 시나리오의 `nodes`에 이어 붙인다 */
   nodes: Node[]
-  /** 시나리오의 `vars`에 넣는다 (과제 풀이 순서) */
-  vars: VarSpec
+  /** 시나리오의 `vars`에 넣는다 (과제 풀이 순서, 과제마다 위험한 곳) */
+  vars: VarSpec[]
   /** 첫 과제로 가는 길. 과제를 시작하기 전 이야기 장면의 `next`로 쓴다. */
   enter: Route
   /** 시나리오 보드의 `questions`에 넣는다 (과제 순서대로가 아니라 정의한 순서) */
@@ -107,6 +122,9 @@ export interface TasksBuilt {
 
 const DEFAULT_FAIL: Effect[] = [{ time: 1 }, { stat: 'sanity', add: -2, to: 'all' }]
 const DEFAULT_PASS: Effect[] = [{ time: 1 }]
+/** 시간이 하루 단위로 흐르는 시나리오(`dayClock`)의 기본 대가: 시간은 밤이 지나며 흐른다 */
+const DAY_FAIL: Effect[] = [{ stat: 'sanity', add: -2, to: 'all' }]
+const DAY_PASS: Effect[] = []
 
 const flag = (id: string): Cond => ({ flag: id })
 const permutations = <T>(items: T[]): T[][] =>
@@ -117,6 +135,23 @@ const solvedFlag = (t: string) => `solved-${t}`
 const failFlag = (t: string, a: string) => `ng-${t}-${a}`
 const passFlag = (t: string, n: 1 | 2) => `pass-${t}-${n}`
 const seenFlag = (t: string, p: string) => `seen-${t}-${p}`
+/** 과제 `t`에서 이번 판의 위험한 곳을 가리키는 무작위 값의 이름 */
+export const riskVar = (t: string) => `risk-${t}`
+
+const pieces = (text: Text) => (typeof text === 'string' ? [{ text }] : text)
+
+/** 위험한 곳을 살폈을 때의 발견: 원래 발견에 위험의 이야기와 대가를 덧붙인 것이 앞에, 평범한 발견이 뒤에 온다 */
+function withRisk(task: TaskDef, probe: TaskProbe): TaskProbe['findings'] {
+  if (probe.risk === undefined) return probe.findings
+  const hot: Cond = { var: riskVar(task.id), is: probe.id }
+  const risky = probe.findings.map((f) => ({
+    ...f,
+    when: f.when ? ({ all: [hot, f.when] } as Cond) : hot,
+    text: [...pieces(f.text), ...pieces(probe.risk as Text)],
+    effects: [...(f.effects ?? []), ...(task.hazard ?? [])],
+  }))
+  return [...risky, ...probe.findings]
+}
 
 /** 틀릴 수 있는 답 (정답이 판마다 다른 답도 포함) */
 const wrongOf = (task: TaskDef): TaskAnswer[] => task.answers.filter((a) => a.right !== true)
@@ -150,6 +185,10 @@ export function buildTasks(spec: TasksSpec): TasksBuilt {
     }
     if (!t.answers.some((a) => a.right !== false)) throw new Error(`과제 "${t.id}": 정답이 없다`)
     if (wrongOf(t).some((a) => !a.wrong)) throw new Error(`과제 "${t.id}": 틀릴 수 있는 답에 이야기(wrong)가 없다`)
+    const risky = t.probes.filter((p) => p.risk !== undefined)
+    if (risky.length === 1) throw new Error(`과제 "${t.id}": 위험한 곳(risk)은 둘 이상이어야 판마다 어디가 위험한지 달라진다`)
+    if (risky.length > 0 && !t.hazard?.length) throw new Error(`과제 "${t.id}": risk가 있는 조사가 있으면 대가(hazard)도 있어야 한다`)
+    if (spec.dayClock && !t.night) throw new Error(`과제 "${t.id}": dayClock이면 오답·패스 뒤의 밤(night)이 있어야 시간이 흐른다`)
     for (const p of t.probes) {
       if (p.min !== undefined && (!Number.isInteger(p.min) || p.min < 2)) throw new Error(`과제 "${t.id}" 조사 "${p.id}": min은 2 이상의 정수여야 한다`)
       if (p.min !== undefined && p.max !== undefined && p.max < p.min) throw new Error(`과제 "${t.id}" 조사 "${p.id}": max가 min보다 작다`)
@@ -162,7 +201,13 @@ export function buildTasks(spec: TasksSpec): TasksBuilt {
   // ───── 과제 순서: 판마다 무작위
   const orders = permutations(tasks.map((t) => t.id))
   const orderKey = (o: string[]) => o.join('>')
-  const vars: VarSpec = { id: orderVar, pick: orders.map(orderKey) }
+  const vars: VarSpec[] = [
+    { id: orderVar, pick: orders.map(orderKey) },
+    ...tasks.flatMap((t) => {
+      const risky = t.probes.filter((p) => p.risk !== undefined)
+      return risky.length > 0 ? [{ id: riskVar(t.id), pick: risky.map((p) => p.id) }] : []
+    }),
+  ]
   const allSolved: Cond = { all: tasks.map((t) => flag(solvedFlag(t.id))) }
   const intro = (t: string) => `${t}-intro`
   const enter: Route = [
@@ -186,8 +231,8 @@ export function buildTasks(spec: TasksSpec): TasksBuilt {
     const think = `${t}-think`
     // 오답·패스 뒤에는 하루가 저문다: 이 과제만의 밤이 있으면 거기를 거쳐 조사로 돌아간다
     const afterMiss = task.night ? `${t}-night` : probe
-    const fail = task.failCost ?? DEFAULT_FAIL
-    const pass = task.passCost ?? DEFAULT_PASS
+    const fail = task.failCost ?? (spec.dayClock ? DAY_FAIL : DEFAULT_FAIL)
+    const pass = task.passCost ?? (spec.dayClock ? DAY_PASS : DEFAULT_PASS)
 
     // 오답·패스 뒤에 읽는 이야기에 붙는 안내: 새로 열린 조사가 있는지
     const unlocked: { text: string; when: Cond }[] = [
@@ -215,13 +260,15 @@ export function buildTasks(spec: TasksSpec): TasksBuilt {
             text: p.text,
             max: p.max ?? p.min ?? 1,
             ...(p.min !== undefined ? { min: p.min } : {}),
+            // `locked`는 두지 않는다: 두면 아직 안 열린 단계의 조사가 처음부터 잠긴 채 보인다 (부상 문구는 엔진의 기본값을 쓴다)
+            ...(p.needsHealthy ? { needsHealthy: true } : {}),
             when: conds.length === 1 ? conds[0] : ({ all: conds } as Cond),
           }
         }),
         { id: `${t}-wait`, text: task.waitText ?? '살피지 않고 다른 사람이 하는 일을 지켜본다', calming: true },
       ],
       private: task.probes.flatMap((p) =>
-        p.findings.map((f): PrivateFinding => ({ ...f, action: p.id, effects: [...(f.effects ?? []), { flag: seenFlag(t, p.id) }] })),
+        withRisk(task, p).map((f): PrivateFinding => ({ ...f, action: p.id, effects: [...(f.effects ?? []), { flag: seenFlag(t, p.id) }] })),
       ),
       outcomes: [{ next: think }],
     })

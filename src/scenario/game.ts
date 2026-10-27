@@ -172,6 +172,7 @@ function startRun(
     vars,
     nodeId: sc.start,
     time: 0,
+    period: 'day',
     flags: [],
     players: roster.map((p): RunPlayer => {
       const archetype = findArchetype(p.archetype)
@@ -344,8 +345,12 @@ function go(sc: Scenario, g: ScenarioGame, target: string, depth = 0, carry: Cha
   run.personal = {}
   run.ready = []
   run.result = null
+  // 밤에서 낮으로 넘어가면 하루가 지난다: 하루씩 흐르는 시계(`clock.byDay`)는 이때 1 오른다 (오답·패스든 성공이든 똑같이)
+  const period = node.period ?? run.period
+  const dawn = !!sc.clock.byDay && run.period === 'night' && period === 'day'
+  run.period = period
   // 지난 선택의 여파(`later`)와 이 장면의 진입 효과를 적용하고, 화면에 보일 수 있게 남긴다
-  const aftermath = [...carry, ...flushPending(g), ...applyEffects(g, node.onEnter)]
+  const aftermath = [...carry, ...flushPending(g), ...(dawn ? applyEffects(g, [{ time: 1 }]) : []), ...applyEffects(g, node.onEnter)]
   run.aftermath = aftermath
 
   if (node.kind === 'ending') {

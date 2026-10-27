@@ -116,6 +116,7 @@ const item: TaskDef = {
       id: 'receipt',
       text: '바닥에 떨어진 영수증 종이를 주워 읽는다',
       tier: 1,
+      risk: '영수증을 집어 든 순간 인쇄된 글자가 잉크처럼 번져 손가락을 타고 올라왔다. 털어 내도 손끝이 한참 얼얼했고, 종이는 어느새 새하얗게 비어 있었다.',
       findings: byPrice((p) => ({
         text: `바닥의 영수증은 아직 따뜻하다. 맨 윗줄에 어제 날짜의 거래가 한 줄 인쇄되어 있다.\n“어제: ${itemLabel(yesterdayOf(p))}.”`,
         effects: [learn(`yday-${p}`)],
@@ -125,6 +126,8 @@ const item: TaskDef = {
       id: 'slot',
       text: '투입구 안쪽을 손끝으로 더듬어 살핀다',
       tier: 2,
+      needsHealthy: true,
+      risk: '더듬던 손가락을 투입구가 살짝 물었다. 빼내려 하자 입이 더 오므라들었다. 겨우 빼냈을 때 손가락 마디에는 이빨 같은 자국이 선명했다.',
       findings: byPrice((p) => {
         const x = nextOf(ITEM_ORDER, p, 1)
         return { text: `${SLOT_TEXT[x]}\n나머지 둘 중 무엇인지는 이것만으로는 모르겠다.`, effects: [learn(`no-item-${x}`)] }
@@ -135,6 +138,8 @@ const item: TaskDef = {
       text: '한 명은 투입구 덮개를 밀어 열어 두고, 한 명은 안쪽의 홈을 들여다본다',
       tier: 2,
       min: 2,
+      needsHealthy: true,
+      risk: '덮개를 잡고 있던 손 위로 투입구가 닫히려 들었다. 둘이 함께 밀어 겨우 막았지만, 덮개에 눌린 손등에는 금세 멍이 올라왔다.',
       findings: byPrice((p) => ({
         text: `한 사람이 투입구의 덮개를 밀어 열어 두고, 다른 사람이 안쪽 홈을 들여다보았다. 오늘 열려 있는 홈은 ${SHAPE[p]}이다.`,
         effects: [learn(`today-${p}`)],
@@ -165,6 +170,7 @@ const item: TaskDef = {
       id: 'ledger',
       text: '자판기 옆에 걸린 장부의 오늘 줄을 읽는다',
       tier: 3,
+      risk: '장부를 넘기던 손가락이 종이에 베였다. 피 한 방울이 떨어지자 오늘 줄의 글씨가 잠깐 꿈틀했다가 제자리로 돌아왔다.',
       findings: byPrice((p) => ({
         text: `장부의 오늘 날짜 줄은 비어 있다. 그 옆에 아주 작게 적혀 있다. “${itemLabel(p)}.”`,
         effects: [learn(`ledger-${p}`)],
@@ -201,6 +207,7 @@ const item: TaskDef = {
       },
     ],
   },
+  hazard: [{ hurt: 'actor' }],
   question: '자판기는 오늘 밤 무엇을 받는가?',
   answers: ITEMS.map(
     ([id, label]): TaskAnswer => ({
@@ -248,6 +255,7 @@ const button: TaskDef = {
       id: 'ear',
       text: '버튼 아래쪽에 귀를 대고 전류 소리를 따라간다',
       tier: 1,
+      risk: '귀를 대는 순간 전류가 귓바퀴를 튀어 지나갔다. 한쪽 귀가 한참 윙윙거렸고, 머리를 흔들어도 소리가 가시지 않았다.',
       findings: byWiring((w) => ({
         text: `전류 소리를 따라 선을 눈으로 좇았다. 빨간 선이 ${buttonLabel(w.red)} 칸으로 들어간다.`,
         effects: [learn(`red-at-${w.red}`)],
@@ -258,6 +266,7 @@ const button: TaskDef = {
       id: 'dust',
       text: '덮개 틈으로 보이는 파란 선의 끝을 따라가 본다',
       tier: 1,
+      risk: '덮개 틈에 눈을 가까이 대자 틈에서 불꽃이 튀었다. 눈앞이 하얘졌다가 천천히 돌아왔지만, 눈두덩이 화끈거리고 한동안 초점이 맞지 않았다.',
       findings: byWiring((w) => ({
         text: `덮개 틈으로 파란 선의 끝을 따라가 보았다. ${buttonLabel(w.green)} 칸으로는 가지 않는다.`,
         effects: [learn(`blue-not-${w.green}`)],
@@ -277,6 +286,8 @@ const button: TaskDef = {
       id: 'peek',
       text: '덮개를 열고 초록 선의 끝을 직접 확인한다 (전류에 손끝이 저리다)',
       tier: 2,
+      needsHealthy: true,
+      risk: '덮개를 젖히는 손등에 방전이 튀었다. 팔이 쭉 뻗은 채 굳었다가 한참 만에 풀렸다. 풀린 뒤에도 손가락이 제 뜻대로 움직이지 않았다.',
       findings: byWiring((w) => ({
         text: `덮개를 열어 초록 선의 끝을 확인했다. ${buttonLabel(w.green)} 칸에 이어져 있다. 손끝이 저렸다.`,
         effects: [learn(`green-at-${w.green}`)],
@@ -297,6 +308,8 @@ const button: TaskDef = {
       id: 'panel',
       text: '자판기 옆면의 정비 패널을 연다',
       tier: 3,
+      needsHealthy: true,
+      risk: '정비 패널의 모서리가 날카로웠다. 손바닥이 베여 피가 맺혔는데, 방울이 안쪽 배선도 위로 떨어지자 선들이 한 번 꿈틀했다.',
       findings: byWiring((w) => ({
         text: `정비 패널 안쪽에 배선도가 붙어 있다. 빨강은 ${buttonLabel(w.red)}, 초록은 ${buttonLabel(w.green)}, 파랑은 ${buttonLabel(w.blue)} 칸에 이어진다.`,
         effects: [learn(`wiring-${w.green}-${w.red}`)],
@@ -334,6 +347,7 @@ const button: TaskDef = {
       },
     ],
   },
+  hazard: [{ hurt: 'actor' }],
   question: '눌러야 할 버튼은 어느 것인가?',
   answers: BUTTONS.map(
     ([id, label]): TaskAnswer => ({
@@ -371,6 +385,7 @@ const change: TaskDef = {
       id: 'wall',
       text: '벽의 낙서 아래쪽을 읽는다',
       tier: 1,
+      risk: '‘받지 마’를 읽는 동안 글자들이 눈앞에서 한 줄씩 늘어나는 것 같았다. 눈을 뗄 수 없어 한참을 그대로 서 있었고, 정신을 차렸을 때 벽의 글씨는 처음 그대로였다.',
       findings: [
         {
           text: '벽의 낙서를 한 줄씩 읽는다. 날짜와 상품 번호 사이에 같은 글씨가 반복된다.\n[[shake|받지 마.]] [[shake|받지 마.]] [[shake|받지 마.]]\n그 아래 누군가 더 작게 적었다. “손이 안 빠진다. 거스름돈을 쥐면 그게 빚이 된다.”',
@@ -382,6 +397,7 @@ const change: TaskDef = {
       id: 'tray-paper',
       text: '반환구 뚜껑 안쪽에 붙은 종이를 읽는다',
       tier: 1,
+      risk: '종이를 읽는 동안 반환구 안쪽에서 동전 구르는 소리가 났다. 굴러 나올 것 같은데 끝내 나오지 않았다. 기다리는 동안 손바닥에 식은땀이 찼다.',
       findings: [
         {
           text: '반환구 뚜껑 안쪽에 영수증 한 장이 붙어 있다. 항목 칸에는 아무것도 적혀 있지 않고, 맨 아래 줄만 인쇄되어 있다.\n“거스름돈 반환 시 거래는 [[whisper|처음부터]] 다시 시작됩니다.”',
@@ -393,6 +409,7 @@ const change: TaskDef = {
       id: 'ledger',
       text: '자판기 아래에 끼워진 장부의 첫머리를 읽는다',
       tier: 2,
+      risk: '합계 칸에 방금 읽은 사람의 이름이 연필로 쓰였다가 지워지는 것을 보았다. 지운 자국만 남았고, 그 자국이 오래 눈에 밟혔다.',
       findings: [
         {
           text: '장부 첫머리에 거래의 계산이 적혀 있다. 물건을 넣으면 −1, 거스름돈이 떨어지면 +1. 합이 0이 되어야 거래가 닫힌다.\n그 아래 한 줄. “동이 트면 합이 0이 아닌 것은 가져갑니다.”',
@@ -429,6 +446,7 @@ const change: TaskDef = {
       id: 'sign',
       text: '반환구 위에 붙은 작은 표지를 읽는다',
       tier: 3,
+      risk: '‘떠나세요’를 읽자 어디선가 그럼 가라는 듯한 낮은 속삭임이 들렸다. 정말 떠나도 되는 건지, 아무도 대답해 주지 않았다.',
       findings: [
         {
           text: '반환구 위에 작은 표지가 붙어 있다. “그대로 두고 떠나세요.”',
@@ -463,30 +481,39 @@ const change: TaskDef = {
       },
     ],
   },
+  hazard: [{ stat: 'sanity', add: -3, to: 'actor' }],
   question: '거래가 끝난 뒤, 거스름돈은 어떻게 해야 하는가?',
   answers: [
     {
       id: 'take',
-      text: '거스름돈을 받아서 챙긴다',
+      text: '거스름돈을 받아서 주머니에 넣는다',
       right: false,
       wrong: '반환구의 동전을 쥐는 시늉을 했다. 손가락이 닿자마자 [[shake|손이 빠지지 않았다.]]\n힘껏 뿌리치고서야 풀렸다. 손바닥에 동전 모양의 자국이 오래 남았다.\n받는 것은 아니다.',
       wrongFact: 'change-debt',
     },
     {
       id: 'again',
-      text: '도로 투입구에 넣어 다시 거래한다',
+      text: '거스름돈을 도로 투입구에 넣어 다시 거래한다',
       right: false,
       wrong: '반환구의 동전을 투입구에 가져다 댔다. 투입구가 반가운 듯 입을 벌렸다.\n표시등이 처음으로 돌아갔다. [[flicker|0, 0, 0.]] 서둘러 손을 뺐다.\n도로 넣는 것은 아니다.',
       wrongFact: 'change-restart',
     },
-    { id: 'leave', text: '건드리지 않고 그대로 두고 떠난다', right: true },
+    {
+      id: 'cover',
+      text: '반환구 뚜껑을 눌러 닫아, 거스름돈이 나오지 못하게 막는다',
+      right: false,
+      wrong:
+        '반환구 뚜껑을 손바닥으로 눌러 닫았다. 안쪽에서 동전들이 끓는 물처럼 부딪쳤다.\n막는다고 거래가 끝난 것이 아니다. 장부의 합계 칸은 여전히 닫히지 않은 채 깜빡였다.\n뚜껑을 누른 손바닥 아래로 [[shake|밀어 올리는 힘]]이 느껴져 서둘러 손을 뗐다. 막는 것도 답이 아니다.',
+      wrongFact: 'change-no-cover',
+    },
+    { id: 'leave', text: '거스름돈에는 손대지 않고, 반환구를 그대로 둔 채 자리를 뜬다', right: true },
   ] satisfies TaskAnswer[],
   passStory: '아직 확신이 없다. 답을 걸지 않고 다시 둘러보기로 했다. 그러는 사이 자판기의 불빛이 한 칸 낮아졌다.',
   solved:
     '반환구 앞에서 한참 서 있었다. 손을 뻗지 않았다. 뻗고 싶지도 않았다.\n반환구의 뚜껑이 [[whisper|아쉬운 듯]] 천천히 닫혔다.\n맞다. 거스름돈은 받지도, 도로 넣지도 않고 그대로 두고 떠나는 것이다.',
   board: {
     text: '거스름돈은 어떻게 해야 하는가?',
-    facts: ['change-debt', 'change-restart', 'change-ledger', 'change-moved', 'change-night-ledger', 'change-night-warm', 'change-sign'],
+    facts: ['change-debt', 'change-restart', 'change-ledger', 'change-moved', 'change-night-ledger', 'change-night-warm', 'change-sign', 'change-no-cover'],
     answer: '받지도, 도로 넣지도 않고 그대로 두고 떠난다.',
   },
 }
@@ -933,6 +960,7 @@ export const vending: Scenario = {
     { id: 'change-sign', text: '반환구 위의 표지: “그대로 두고 떠나세요.”' },
     { id: 'change-night-ledger', text: '장부의 오늘 줄 합계 칸은 비어 있다. 합이 0이어야 거래가 닫힌다.' },
     { id: 'change-night-warm', text: '반환구의 동전은 아직 따뜻하다. 쥐면 놓기 어려울 것 같다.' },
+    { id: 'change-no-cover', text: '반환구를 막아도 장부는 닫히지 않는다. 안쪽에서 동전이 밀어 올린다.' },
     // 판마다 바뀌는 값에 대한 사실 (조사 보드에만 붙고 단서 노트에는 남지 않는다)
     ...ITEM_ORDER.flatMap((p) => [
       { id: `yday-${p}`, text: `영수증의 어제 거래: ${itemLabel(yesterdayOf(p))}.`, run: true },
@@ -961,7 +989,7 @@ export const vending: Scenario = {
     questions: built.questions,
   },
   vars: [
-    built.vars,
+    ...built.vars,
     { id: 'price', pick: [...ITEM_ORDER] },
     { id: 'button', pick: [...BUTTON_ORDER] },
     { id: 'wires', pick: ['1', '2'] },

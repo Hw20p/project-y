@@ -345,7 +345,10 @@ export function viewForScenario(sc: Scenario, g: ScenarioGame, playerId: string)
 
   // ───── 며칠째 낮/밤: 지나온 장면의 시간대를 따라가며, 밤에서 낮으로 넘어갈 때 하루가 지난다
   let timeOfDay: ScenarioView['timeOfDay'] = null
-  if (sc.nodes.some((n) => n.period)) {
+  if (sc.clock.byDay) {
+    // 시계가 하루씩 흐르므로 며칠째인지는 시계에서 나온다 (조명이 어두워지는 날과 화면의 날짜가 어긋나지 않는다)
+    timeOfDay = { day: run.time + 1, period: run.period ?? 'day' }
+  } else if (sc.nodes.some((n) => n.period)) {
     let day = 1
     let period: 'day' | 'night' = 'day'
     for (const id of run.visited) {
@@ -359,18 +362,18 @@ export function viewForScenario(sc: Scenario, g: ScenarioGame, playerId: string)
 
   const endingNodes = sc.nodes.filter((n) => n.kind === 'ending')
   const clock = sc.clock.labels
+  const per = sc.clock.per ?? 1
+  /** 시계가 몇 칸 넘어갔는지: 시계 1에서 첫 칸, 이후 `per`마다 한 칸 */
+  const clockStep = (time: number) => Math.ceil(time / per)
   return {
     mode: 'scenario',
     scenario: { id: sc.id, code: sc.code, name: sc.name, type: sc.type },
     runNo: g.runNo,
     time: run.time,
-    clockLabel: clock[Math.min(Math.floor(run.time / (sc.clock.per ?? 1)), clock.length - 1)] ?? '',
+    clockLabel: clock[Math.min(clockStep(run.time), clock.length - 1)] ?? '',
     light:
       sc.clock.light && sc.deadline
-        ? {
-            max: Math.ceil(sc.deadline.time / (sc.clock.per ?? 1)),
-            level: Math.min(Math.floor(run.time / (sc.clock.per ?? 1)), Math.ceil(sc.deadline.time / (sc.clock.per ?? 1))),
-          }
+        ? { max: clockStep(sc.deadline.time), level: Math.min(clockStep(run.time), clockStep(sc.deadline.time)) }
         : null,
     timeOfDay,
     phase: run.phase,

@@ -1,7 +1,9 @@
 import type { EndingTier } from '../../scenario/types.ts'
 import type { ScenarioClient } from '../client.ts'
-import { useMemo } from 'react'
-import { Appear, Beats, beatSteps, splitBeats, useAdvanceKey, useSequence, useSteps } from '../Narration.tsx'
+import { useEffect, useMemo } from 'react'
+import { playSfx } from '../fx.tsx'
+import { Appear, Beats, beatSteps, DistortContext, splitBeats, useAdvanceKey, useSequence, useSteps } from '../Narration.tsx'
+import { ENDING_DISTORT } from './EndingFx.tsx'
 
 const TIER_LABEL: Record<EndingTier, string> = { true: '진엔딩', good: '좋은 엔딩', neutral: '보통 엔딩', bad: '나쁜 엔딩' }
 const TIER_CLASS: Record<EndingTier, string> = {
@@ -31,21 +33,28 @@ export function ScenarioEnding({
   )
   const seq = useSequence(steps)
   useAdvanceKey(seq, client.retry)
+  // 엔딩의 종류에 맞는 소리가 제목이 나타날 때 한 번 난다
+  useEffect(() => {
+    playSfx(`ending-${ending.tier}`)
+  }, [ending.id, view.runNo])
 
   const found = view.endings.reached.length
   const total = view.endings.total
 
   return (
-    <section className="py-10 text-center" onClick={() => !seq.done && seq.skip()}>
+    <section className={`ending ending-${ending.tier} py-10 text-center`} onClick={() => !seq.done && seq.skip()}>
       <Appear step={at.title} seq={seq}>
         <p className="text-xs tracking-widest text-ash">
           {view.runNo}번째 판 · <span className={TIER_CLASS[ending.tier]}>{TIER_LABEL[ending.tier]}</span>
           {ending.first && <span className="ml-2 text-amber">처음 닿았다</span>}
         </p>
-        <h2 className="title-card mt-2 font-serif-kr text-3xl font-bold sm:text-4xl">{ending.title}</h2>
+        <h2 className="title-card ending-title mt-2 font-serif-kr text-3xl font-bold sm:text-4xl">{ending.title}</h2>
       </Appear>
 
-      <Beats beats={beats} at={at} seq={seq} className="mx-auto mt-8 max-w-xl text-left font-serif-kr leading-9 text-fog" />
+      {/* 엔딩 본문은 파티원의 정신력과 상관없이 엔딩 등급이 정한 모습으로 흐른다 */}
+      <DistortContext value={ENDING_DISTORT[ending.tier]}>
+        <Beats beats={beats} at={at} seq={seq} className="mx-auto mt-8 max-w-xl text-left font-serif-kr leading-9 text-fog" />
+      </DistortContext>
 
       <Appear step={at.record} seq={seq} className="mx-auto mt-8 max-w-xl text-left">
         <p className="text-xs text-ash">

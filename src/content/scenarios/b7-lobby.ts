@@ -7,9 +7,12 @@
 //
 // 과제마다 추리가 다르다: 엘리베이터는 시험 결과로 숨은 규칙을 찾고(규칙형), 소파는 쪽지 세 장 가운데 사실이 한 장뿐이라는 규칙으로
 // 따뜻한 자리를 가리고(모순형), 계단은 센 방식마다 다른 범위 단서를 겹쳐 기둥 수를 좁힌 뒤 "하나 적게"를 적용한다(수치형).
-// 과제 사이에는 사건(발소리·전화)과 밤(개인 행동)이 있다. 조명은 오답·패스에서만 어두워지고, 마지막 단계는 암전이다.
+// 과제 사이에는 사건(발소리·전화)과 밤(개인 행동)이 있다. 하루가 지날 때마다(성공이든 실패든) 시계가 흐르고, 이틀에 한 번
+// (2일째, 4일째, 6일째) 조명이 어두워지며 여드레째(조명이 네 번 어두워진 뒤)는 암전이다.
+// 조사에는 위험한 곳이 숨어 있다: 과제마다 `risk`가 있는 조사 중 하나가 판마다 뽑히고, 거기를 살핀 사람은 발견과 함께 대가를 치른다.
 //
-// 판마다 바뀌는 값: seat(따뜻한 소파 a·b·c), stairs(난간 기둥 수 9·11·13), order(과제 순서).
+// 판마다 바뀌는 값: seat(따뜻한 소파 a·b·c), stairs(난간 기둥 수 9·11·13), order(과제 순서),
+// events(사건 순서: 발소리가 먼저 fp / 전화가 먼저 ph), risk-<과제>(그 과제에서 위험한 조사).
 import { buildTasks, type TaskAnswer, type TaskDef, type TaskProbe } from '../../scenario/tasks.ts'
 import type { Cond, Node, PersonalOption, Scenario } from '../../scenario/types.ts'
 
@@ -131,6 +134,7 @@ const lift: TaskDef = {
       id: 'panel',
       text: '패널 아래의 낙서를 읽는다',
       tier: 1,
+      risk: '낙서를 읽는 동안 패널 안쪽에서 달각, 하고 무언가 버튼을 눌러 보는 소리가 났다. 안쪽에서. 손끝이 얼어붙어 한참을 움직일 수 없었다.',
       findings: [
         {
           text: '층 버튼에는 눌러 본 흔적이 가득하다. 패널 아래에 누군가 낙서를 남겼다. “누르면 돌아온다.”',
@@ -142,6 +146,7 @@ const lift: TaskDef = {
       id: 'glance',
       text: '문의 거울을 정면으로 보지 않고 곁눈으로 훑는다',
       tier: 1,
+      risk: '곁눈질이 길어졌다. 거울 속 일행 사이에서 누군가 천천히 고개를 돌려 이쪽을 똑바로 보았다. [[shake|눈이 마주쳤다.]] 시선을 돌리자 거울은 다시 평범해졌다.',
       findings: [
         {
           text: '거울을 똑바로 보지 않고 곁눈으로만 훑었다. 비친 일행이 한 명 더 많은 것 같다. 확실하지는 않다. 오래 보고 싶지 않은 느낌이 든다.',
@@ -153,6 +158,7 @@ const lift: TaskDef = {
       id: 'press',
       text: '층 버튼 하나를 눌러 본다 (문은 열어 둔 채)',
       tier: 2,
+      risk: '버튼이 눌린 순간 문 안쪽에서 무언가 마주 손바닥을 댔다. 차가운 진동이 손가락뼈를 타고 어깨까지 올라왔다. 한동안 손이 제 것 같지 않았다.',
       findings: [
         {
           text: '손가락이 닿은 버튼에 불이 들어왔다. 층 표시등이 B6, B5… 거꾸로 내려가더니 B7에서 멈췄다. 되돌아온 것이다. 문은 열린 채였지만 등줄기가 서늘했다.',
@@ -165,6 +171,7 @@ const lift: TaskDef = {
       id: 'still',
       text: '아무것도 건드리지 않고 문 앞에서 가만히 기다려 본다',
       tier: 2,
+      risk: '숨을 죽이고 서 있는 동안 등 뒤에서 누군가 같은 박자로 숨을 쉬었다. 돌아보았을 때 그곳에는 아무도 없었다. 숨소리만 한 박자 늦게 멎었다.',
       findings: [
         {
           text: '숨소리조차 조심하며 문 앞에 섰다. 한참 뒤, 층 표시등이 천천히 한 칸 올라갔다. 아무도 버튼을 누르지 않았는데도.',
@@ -238,27 +245,28 @@ const lift: TaskDef = {
       },
     ],
   },
+  hazard: [{ stat: 'sanity', add: -3, to: 'actor' }],
   question: '이 엘리베이터를 어떻게 해야 위로 올라가는가?',
   answers: [
     {
       id: 'once',
-      text: '층 버튼을 한 번만 누른다',
+      text: '거울은 보지 않고, 층 버튼을 한 번만 가볍게 누른다',
       right: false,
       wrong:
         '층 버튼 하나를 눌렀다. 표시등이 거꾸로 내려가더니 B7에서 멈췄다. 되돌아온 것이다.\n한 번이든 여러 번이든, 누르면 돌아오는 모양이다.',
       wrongFact: 'lift-no-once',
     },
-    { id: 'still', text: '아무것도 건드리지 않고, 거울도 보지 않은 채 가만히 기다린다', right: true },
+    { id: 'still', text: '버튼은 누르지 않고, 거울도 보지 않은 채 문이 닫히기를 기다린다', right: true },
     {
       id: 'mirror',
-      text: '거울로 일행의 수를 세어 본 뒤 올라간다',
+      text: '버튼은 누르지 않고, 거울로 일행의 수를 확인한 뒤 기다린다',
       right: false,
       wrong: '거울 속에서 일행을 한 명씩 세어 보았다. [[shake|하나가 더 있었다.]] 그 사람은 이쪽을 보고 있지 않았다.\n눈을 돌린 뒤에도 한참 동안 시선이 따가웠다.',
       wrongFact: 'lift-no-mirror',
     },
     {
       id: 'top',
-      text: '가장 높은 층(B1) 버튼을 누른다',
+      text: '거울은 보지 않고, 가장 높은 층(B1) 버튼을 끝까지 누른다',
       right: false,
       wrong: 'B1 버튼에 불이 들어왔다. 엘리베이터는 한참을 내려가더니 같은 로비에 같은 소리로 문이 열렸다.\n어느 층을 누르든 돌아오는 것이다.',
       wrongFact: 'lift-no-top',
@@ -300,6 +308,12 @@ const sofa: TaskDef = {
         id: `memo-${pos}`,
         text: NOTE_READ[pos],
         tier: 1,
+        ...(pos === 'sofa'
+          ? {
+              needsHealthy: true,
+              risk: '쪽지를 빼내려 손을 밀어 넣는 순간 소파 틈이 손목을 꼭 물었다. 쿠션이 숨을 쉬듯 한 번 부풀었고, 손을 빼냈을 때 손목에는 붉은 자국이 선명했다.',
+            }
+          : {}),
         findings: bySeat((s) => ({
           text: `${NOTE_POS[pos]}에는 이렇게 적혀 있다. “${SOFA_NOTES[s].find((n) => n.pos === pos)!.text}”`,
           effects: [learn(noteId(s, pos))],
@@ -321,6 +335,7 @@ const sofa: TaskDef = {
       id: 'ink',
       text: '쪽지들의 잉크를 비교해 본다',
       tier: 2,
+      risk: '쪽지를 겹쳐 들여다보던 손가락이 종이 모서리에 베였다. 얇은 상처에서 피가 배어 나와 쪽지 한 장에 번졌는데, 번진 자국은 금세 마른 잉크처럼 검게 변했다.',
       findings: bySeat((s) => ({
         text: `세 쪽지의 잉크를 가까이서 비교했다. ${NOTE_POS[trueNotePos(s)]}의 잉크만 오래되어 갈색으로 바랬다. 나머지 둘은 최근에 쓴 글씨다.`,
         effects: [learn(`ink-${s}`)],
@@ -331,6 +346,8 @@ const sofa: TaskDef = {
       text: '두 사람이 동시에 왼쪽과 가운데 소파를 만져 본다',
       tier: 2,
       min: 2,
+      needsHealthy: true,
+      risk: '손을 떼려는데 쿠션이 손바닥에 들러붙은 것처럼 놓아 주지 않았다. 둘이 힘을 주어 잡아당기자 그제야 툭 떨어졌고, 손바닥이 화끈거렸다.',
       findings: bySeat((s) => ({
         text:
           s === 'a'
@@ -359,6 +376,8 @@ const sofa: TaskDef = {
       id: 'touch',
       text: '소파 세 개를 차례로 만져 본다',
       tier: 3,
+      needsHealthy: true,
+      risk: '따뜻한 소파에서 손을 떼는 순간 쿠션이 손목을 휘감듯 조여 왔다. 겨우 빼냈을 때 팔 전체가 저릿했다. 소파는 아무 일 없었다는 듯 다시 부풀어 올랐다.',
       findings: bySeat((s, label) => ({
         text: `세 소파를 차례로 만져 보았다. ${label} 소파만 방금까지 누가 앉았던 것처럼 따뜻하다. 손을 떼자 쿠션이 천천히 부풀어 올랐다.`,
         effects: [learn(`warm-${s}`)],
@@ -395,6 +414,7 @@ const sofa: TaskDef = {
       },
     ],
   },
+  hazard: [{ hurt: 'actor' }],
   question: '온기가 남은 소파는 어느 쪽인가?',
   answers: SOFAS.map(
     ([id, label]): TaskAnswer => ({
@@ -434,6 +454,7 @@ const stairs: TaskDef = {
       id: 'feel',
       text: '어둠 속에서 난간 기둥을 손으로 더듬어 센다',
       tier: 1,
+      risk: '기둥을 세다가 손바닥이 난간 이음매의 녹슨 쇠 조각에 깊이 긁혔다. 어둠 속이라 얼마나 다쳤는지 보이지 않았지만, 따뜻한 것이 손목을 타고 흘렀다.',
       findings: byStairs((n) => ({
         text: `어둠 속에서 손으로 더듬으며 난간 기둥을 셌다. 손끝이 떨려서 정확하지는 않다.\n${STAIR_CLUE_TEXT[STAIR_CLUES[n][0].id]}`,
         effects: [learn(STAIR_CLUES[n][0].id)],
@@ -475,6 +496,8 @@ const stairs: TaskDef = {
       text: '두 사람이 난간 양쪽에서 동시에 센다',
       tier: 2,
       min: 2,
+      needsHealthy: true,
+      risk: '둘이 동시에 난간에 체중을 싣자 난간 한쪽이 삐걱, 하고 흔들렸다. 휘청하며 계단 모서리에 정강이를 세게 부딪쳤다. 아래의 숫자 세는 소리가 그 순간 한 박자 멈췄다.',
       findings: byStairs((n) => ({
         text: `두 사람이 난간 양쪽에서 동시에 세어 합쳤다. 기둥은 모두 ${n}개다. 틀림없다.`,
         effects: [learn(`exact-${n}`)],
@@ -484,6 +507,8 @@ const stairs: TaskDef = {
       id: 'walk',
       text: '직접 몇 칸 내려가며 세어 본다',
       tier: 2,
+      needsHealthy: true,
+      risk: '되짚어 올라오는 길에 발밑의 한 칸이 사라진 것처럼 푹 꺼졌다. 난간을 잡았지만 발목이 크게 꺾였다. 올라와서 보니 그 칸은 원래 자리에 멀쩡히 있었다.',
       findings: byStairs((n) => ({
         text: `칸을 세며 조심스럽게 내려갔다. ${STAIR_STEPS[n]} 칸에서 계단이 끝났다. 끝에는 로비와 똑같은 로비가 있었다. 서둘러 되짚어 올라왔다.`,
         effects: [learn(`walk-${n}`)],
@@ -494,6 +519,7 @@ const stairs: TaskDef = {
       id: 'wall',
       text: '계단 벽에 새겨진 눈금을 읽는다',
       tier: 3,
+      risk: '눈금을 더듬어 읽던 손가락이 벽의 날카로운 홈에 걸려 손톱이 갈라졌다. 벽이 손가락을 놓아 주기 전까지 아주 짧게, 안쪽에서 무언가 당기는 느낌이 있었다.',
       findings: byStairs((n) => ({
         text: `계단 벽에 오래된 눈금이 새겨져 있다. 맨 아래 눈금 옆에 작은 글씨가 있다. “${STAIR_STEPS[n]}.”`,
         effects: [learn(`wall-${n}`)],
@@ -533,6 +559,7 @@ const stairs: TaskDef = {
       },
     ],
   },
+  hazard: [{ hurt: 'actor' }],
   question: '계단은 몇 칸을 내려가야 끝에 닿는가?',
   answers: STAIRS.map(
     (n): TaskAnswer => ({
@@ -561,7 +588,8 @@ const stairs: TaskDef = {
 }
 
 // ───────────────────────── 막간: 사건과 밤 ─────────────────────────
-// 과제 ①이 풀리면 발소리 사건, 과제 ②가 풀리면 전화 사건이 오고, 둘 다 밤(개인 행동)으로 이어진다. 밤이 끝나면 다음 과제다.
+// 과제 ①이 풀리면 첫 사건, 과제 ②가 풀리면 둘째 사건(발소리와 전화, 순서는 판마다 다르다)이 오고, 둘 다 밤(개인 행동)으로 이어진다.
+// 밤이 끝나 새 낮이 오면 다음 과제다.
 
 /** 밤의 스텟 선택지. 오답·패스 뒤의 밤에는 과제의 선택지와 함께, 과제를 푼 뒤의 밤에는 이것만 나온다. */
 const NIGHT_STAT: PersonalOption[] = [
@@ -589,12 +617,26 @@ const NIGHT_STAT: PersonalOption[] = [
   },
 ]
 
+/** 사건 순서는 판마다 다르다: 발소리가 먼저(fp)이거나 전화가 먼저(ph)다 */
+const EVENT_ORDERS = ['fp', 'ph'] as const
+const eventsAre = (o: (typeof EVENT_ORDERS)[number]): Cond => ({ var: 'events', is: o })
+
 const built = buildTasks({
   tasks: [lift, sofa, stairs],
   after: 'gather',
   nightCommon: NIGHT_STAT,
+  dayClock: true,
   between: [
-    { when: { not: { flag: 'footsteps' } }, to: 'event-footsteps' },
+    // 과제 하나가 풀릴 때마다 아직 안 겪은 사건 하나가 온다: 발소리가 먼저인 판은 발소리 → 전화, 전화가 먼저인 판은 전화 → 발소리
+    {
+      when: {
+        any: [
+          { all: [eventsAre('fp'), { not: { flag: 'footsteps' } }] },
+          { all: [eventsAre('ph'), { flag: 'called' }, { not: { flag: 'footsteps' } }] },
+        ],
+      },
+      to: 'event-footsteps',
+    },
     { when: { not: { flag: 'called' } }, to: 'phone-call' },
     { to: 'night' },
   ],
@@ -926,7 +968,7 @@ const STORY_NODES: Node[] = [
       },
       {
         text: '조명이 완전히 꺼졌다. 어둠 속에서 누군가 천천히 일행의 수를 셌다. [[whisper|하나, 둘, 셋.]] 한 번도 서두르지 않았다. 불이 다시 들어왔을 때 소파에는 한 사람이 더 앉아 있었고, 일행은 서로의 얼굴을 알아보지 못했다.',
-        when: { all: [{ time: { min: 8 } }, { not: { panic: 'all' } }, { not: { flag: 'end-follow' } }, { not: { flag: 'end-sign' } }] },
+        when: { all: [{ time: { min: 7 } }, { not: { panic: 'all' } }, { not: { flag: 'end-follow' } }, { not: { flag: 'end-sign' } }] },
       },
     ],
   },
@@ -1085,10 +1127,10 @@ export const b7Lobby: Scenario = {
     goal: '조명이 완전히 꺼지기 전에, 일행 모두가 이 층을 무사히 벗어날 방법을 찾아낸다.',
     questions: built.questions,
   },
-  vars: [built.vars, { id: 'seat', pick: ['a', 'b', 'c'] }, { id: 'stairs', pick: [...STAIRS] }],
-  // 오답·패스는 하루를 보낸다. 이틀마다 조명이 한 단계 어두워지고, 네 단계가 모두 지나면(여드레째) 암전이다.
-  clock: { labels: ['조명이 환하다', '조명이 깜빡인다', '조명이 흐려진다', '조명이 어둡다', '조명이 꺼졌다'], light: true, per: 2 },
-  deadline: { time: 8, node: 'bad-end' },
+  vars: [...built.vars, { id: 'seat', pick: ['a', 'b', 'c'] }, { id: 'stairs', pick: [...STAIRS] }, { id: 'events', pick: [...EVENT_ORDERS] }],
+  // 밤이 지나 새 낮이 오면(성공이든 실패든) 시계가 하루 흐른다. 2일째·4일째·6일째에 조명이 한 단계씩 어두워지고, 여드레째에는 암전이다.
+  clock: { labels: ['조명이 환하다', '조명이 깜빡인다', '조명이 흐려진다', '조명이 어둡다', '조명이 꺼졌다'], light: true, per: 2, byDay: true },
+  deadline: { time: 7, node: 'bad-end' },
   onAllPanic: 'bad-end',
   start: 'arrive',
   nodes: STORY_NODES,

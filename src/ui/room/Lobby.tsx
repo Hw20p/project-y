@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { MAX_PLAYERS, type ServerMsg } from '../../net/protocol.ts'
+import { useMusic } from '../fx.tsx'
 import { ARCHETYPES, STAT_LABEL } from '../../scenario/stats.ts'
 import { LobbyMap } from './LobbyMap.tsx'
 
@@ -24,6 +25,7 @@ export function Lobby({
   onArchetype: (archetype: string) => void
 }) {
   const isHost = lobby.you === lobby.hostId
+  useMusic('lobby')
   const [copied, setCopied] = useState<'code' | 'link' | null>(null)
   const online = lobby.members.filter((m) => m.online)
   const me = lobby.members.find((m) => m.id === lobby.you)

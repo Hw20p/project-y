@@ -4,10 +4,21 @@
 //  - chars = 0 : 통째로 나타나는 줄/블록 (아이콘 줄, 선택지 등)
 // 본문 글 안의 `[[효과|글자]]`는 그 글자에만 떨림·속삭임·깜빡임 같은 효과를 입힌다 (`scenario/fx.ts`).
 // 어디든 누르거나 Enter를 누르면 끝까지 건너뛴다. 속도는 설정(보통·빠름·즉시)을 따른다.
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import {
+  createContext,
+  Fragment,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react'
 import { parseFx, type FxSpan } from '../scenario/fx.ts'
 import { ReadingContext } from './client.ts'
-import { useFx } from './fx.tsx'
+import { playSfx, useFx } from './fx.tsx'
 
 export interface Step {
   chars: number
@@ -25,8 +36,81 @@ const DEFAULT_PAUSE = 380
 /** 이 글자를 찍은 뒤 다음 글자까지 더 쉬는 시간 (ms, 보통 속도 기준): 서술에 박자가 생긴다 */
 const BREATH_MS: Record<string, number> = { '.': 260, '!': 260, '?': 260, '…': 320, ',': 110, '—': 160 }
 
-/** 정신력이 낮은 사람의 본문이 어긋나 보이게 할지 (화면 위에서 한 번 정한다) */
-export const DistortContext = createContext(false)
+/** 본문이 어긋나 보이는 정도 (화면 위에서 한 번 정한다) */
+export interface Distort {
+  /** 0~1: 글이 번지고 갈라지는 세기. 0이면 아무 효과가 없다 */
+  level: number
+  /** 글자 하나가 일그러질 확률 (0~1) */
+  glitch: number
+}
+
+export const NO_DISTORT: Distort = { level: 0, glitch: 0 }
+export const DistortContext = createContext<Distort>({ level: 0, glitch: 0.012 })
+
+/** 정신력이 5 아래로 떨어지면 번짐·갈라짐이 시작되고, 0에 가까울수록 세진다. 글자 하나가 일그러지는 일은 늘 아주 가끔 있다. */
+export function distortAt(sanity: number): Distort {
+  const level = Math.min(1, Math.max(0, (5 - sanity) / 5))
+  return { level, glitch: 0.012 + level * 0.07 }
+}
+
+/** 글자 일그러짐을 입힐 글자 (공백·문장부호는 건드리지 않는다) */
+const WARPABLE = /[가-힣A-Za-z0-9]/
+
+function hashText(s: string): number {
+  let h = 2166136261
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619)
+  return h >>> 0
+}
+
+/** 글 하나(seed)의 i번째 글자마다 고정된 0~2^32 값. 다시 그려도 같은 글자가 일그러진다. */
+function mix(seed: number, i: number): number {
+  let x = (seed ^ Math.imul(i + 1, 0x9e3779b1)) >>> 0
+  x = Math.imul(x ^ (x >>> 15), 0x85ebca6b) >>> 0
+  x = Math.imul(x ^ (x >>> 13), 0xc2b2ae35) >>> 0
+  return (x ^ (x >>> 16)) >>> 0
+}
+
+const unit = (seed: number, i: number, salt: number) => mix(seed, i * 7 + salt) / 4294967296
+
+function warpStyle(seed: number, i: number): CSSProperties {
+  const spread = (salt: number, amp: number) => ((unit(seed, i, salt) - 0.5) * 2 * amp).toFixed(2)
+  return {
+    '--gr': `${spread(1, 14)}deg`,
+    '--gk': `${spread(2, 16)}deg`,
+    '--gy': `${spread(3, 0.1)}em`,
+    '--gs': (0.78 + unit(seed, i, 4) * 0.5).toFixed(2),
+    '--gd': `${(unit(seed, i, 5) * 5).toFixed(1)}s`,
+  } as CSSProperties
+}
+
+/** 찍힌 글(`from`번째 글자부터)을 그리되, 정해진 글자 몇 개는 일그러뜨린다 */
+function Glyphs({ text, from, seed, glitch }: { text: string; from: number; seed: number; glitch: number }) {
+  if (glitch <= 0 || text === '') return <>{text}</>
+  const out: ReactNode[] = []
+  let run = ''
+  let runAt = from
+  const flush = () => {
+    if (run) out.push(<Fragment key={`p${runAt}`}>{run}</Fragment>)
+    run = ''
+  }
+  for (let k = 0; k < text.length; k++) {
+    const idx = from + k
+    const ch = text[k]
+    if (WARPABLE.test(ch) && unit(seed, idx, 0) < glitch) {
+      flush()
+      out.push(
+        <span key={`w${idx}`} className="glyph-warp" style={warpStyle(seed, idx)}>
+          {ch}
+        </span>,
+      )
+    } else {
+      if (!run) runAt = idx
+      run += ch
+    }
+  }
+  flush()
+  return <>{out}</>
+}
 
 export interface Seq {
   /** 지금 진행 중인 단계 (모두 끝나면 steps.length) */
@@ -55,7 +139,11 @@ export function useSequence(steps: Step[]): Seq {
     if (pos.c < step.chars) {
       const prev = pos.c > 0 ? step.text?.[pos.c - 1] : undefined
       const breath = prev ? (BREATH_MS[prev] ?? 0) : 0
-      const t = setTimeout(() => setPos((p) => ({ i: p.i, c: p.c + 1 })), (CHAR_MS + breath) / speed)
+      const t = setTimeout(() => {
+        const next = step.text?.[pos.c]
+        if (next && next.trim()) playSfx('type') // 글자 소리 (파일을 넣었을 때만 난다. 너무 잦지 않게 소리 쪽에서 거른다)
+        setPos((p) => ({ i: p.i, c: p.c + 1 }))
+      }, (CHAR_MS + breath) / speed)
       return () => clearTimeout(t)
     }
     const t = setTimeout(() => setPos((p) => ({ i: p.i + 1, c: 0 })), (step.pause ?? DEFAULT_PAUSE) / speed)
@@ -94,13 +182,29 @@ export function useSteps<K extends string>(list: StepSpec<K>[], deps: unknown[])
 }
 
 /** 한 글자씩 찍히는 문장. 아직 안 찍힌 부분도 자리를 차지해서 줄이 흔들리지 않는다. `spans`가 있으면 그 범위에 글자 효과를 입힌다. */
-export function Typed({ text, step, seq, spans }: { text: string; step: number; seq: Seq; spans?: FxSpan[] }) {
+export function Typed({
+  text,
+  step,
+  seq,
+  spans,
+  glitch = 0,
+}: {
+  text: string
+  step: number
+  seq: Seq
+  spans?: FxSpan[]
+  /** 글자 하나가 일그러질 확률 */
+  glitch?: number
+}) {
   if (seq.i < step) return <span className="invisible">{text}</span>
   const n = seq.i > step ? text.length : seq.c
+  const seed = hashText(text)
   if (!spans || spans.length === 0) {
     return (
       <>
-        <span>{text.slice(0, n)}</span>
+        <span>
+          <Glyphs text={text.slice(0, n)} from={0} seed={seed} glitch={glitch} />
+        </span>
         <span className="invisible">{text.slice(n)}</span>
       </>
     )
@@ -120,7 +224,9 @@ export function Typed({ text, step, seq, spans }: { text: string; step: number; 
         const shown = Math.max(0, Math.min(sg.t.length, n - sg.at))
         return (
           <span key={i} className={sg.fx ? `fx-${sg.fx}` : undefined}>
-            <span>{sg.t.slice(0, shown)}</span>
+            <span>
+              <Glyphs text={sg.t.slice(0, shown)} from={sg.at} seed={seed} glitch={glitch} />
+            </span>
             <span className="invisible">{sg.t.slice(shown)}</span>
           </span>
         )
@@ -191,13 +297,18 @@ export function Beats({
   prefix?: string
   className?: string
 }) {
-  const distort = useContext(DistortContext)
+  const { warp } = useFx()
+  const ctx = useContext(DistortContext)
+  const distort = warp ? ctx : NO_DISTORT
   return (
-    <p className={`${className}${distort ? ' text-distort' : ''}`}>
+    <p
+      className={`${className}${distort.level > 0 ? ' text-distort' : ''}`}
+      style={distort.level > 0 ? ({ '--distort': distort.level.toFixed(2) } as CSSProperties) : undefined}
+    >
       {beats.map((b, i) => (
         <span key={i}>
           {b.para && <span className="mt-3 block" />}
-          <Typed text={b.text} spans={b.spans} step={at[`${prefix}${i}`]} seq={seq} />
+          <Typed text={b.text} spans={b.spans} step={at[`${prefix}${i}`]} seq={seq} glitch={distort.glitch} />
           {i < beats.length - 1 && !beats[i + 1].para && ' '}
         </span>
       ))}

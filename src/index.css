@@ -343,9 +343,45 @@ body {
   color: var(--color-glow);
   text-shadow: 0 0 8px rgb(169 191 223 / 0.3);
 }
-/* 정신력이 낮을 때 본문이 어긋나 보인다 */
+/*
+ * 정신력이 낮을 때 본문이 번지고 갈라진다. `--distort`(0~1)가 클수록 번짐이 짙고,
+ * 붉은/푸른 겹그림자가 더 벌어지고, 어긋나는 간격이 짧아진다.
+ */
 .text-distort {
-  animation: text-distort 3.4s ease-in-out infinite;
+  --d: var(--distort, 0.5);
+  text-shadow: 0 0 calc(var(--d) * 3px) rgb(210 101 92 / calc(var(--d) * 0.5));
+  animation: text-distort calc(4.4s - var(--d) * 2.9s) ease-in-out infinite;
+}
+
+/*
+ * 글자 하나가 일그러진다 (Narration의 Glyphs). 나타나는 순간 크게 어긋났다가 비뚤게 자리를 잡고,
+ * 가끔 파르르 떨린다. 모양은 글자마다 `--gr`(기울기)·`--gk`(밀림)·`--gy`(높이)·`--gs`(세로 비율)·`--gd`(떨림 지연)로 다르다.
+ */
+.glyph-warp {
+  display: inline-block;
+  transform-origin: 50% 70%;
+  transform: translateY(var(--gy, 0)) rotate(var(--gr, 0deg)) skewX(var(--gk, 0deg)) scaleY(var(--gs, 1));
+  text-shadow: 0 0 0.3em rgb(210 101 92 / 0.4);
+  animation:
+    glyph-in 0.7s ease-out both,
+    glyph-twitch 6s linear var(--gd, 2s) infinite;
+}
+@keyframes glyph-in {
+  0% {
+    transform: translate(-0.08em, -0.12em) rotate(calc(var(--gr, 0deg) * -3)) skewX(calc(var(--gk, 0deg) * -4)) scale(1.5, 0.55);
+    color: var(--color-loss);
+    text-shadow: 0.08em 0 rgb(210 101 92 / 0.8), -0.08em 0 rgb(169 191 223 / 0.7);
+    filter: blur(1.5px);
+  }
+  45% {
+    transform: translate(0.05em, 0.04em) rotate(calc(var(--gr, 0deg) * 1.8)) skewX(calc(var(--gk, 0deg) * 2)) scale(0.9, 1.25);
+    filter: blur(0.5px);
+  }
+}
+@keyframes glyph-twitch {
+  0%, 90%, 100% { translate: none; scale: none; opacity: 1; }
+  92% { translate: 0.07em -0.06em; scale: 1.18 0.82; opacity: 0.45; }
+  95% { translate: -0.05em 0.04em; scale: 0.9 1.15; opacity: 1; }
 }
 
 @keyframes fx-shake {
@@ -362,16 +398,235 @@ body {
   90% { opacity: 1; }
 }
 @keyframes text-distort {
-  0%, 100% { text-shadow: none; }
-  45% { text-shadow: 1.2px 0 rgb(210 101 92 / 0.4), -1.2px 0 rgb(169 191 223 / 0.4); }
-  50% { text-shadow: -1.5px 0 rgb(210 101 92 / 0.45), 1.5px 0 rgb(169 191 223 / 0.45); }
-  55% { text-shadow: none; }
+  0%, 40%, 100% { text-shadow: 0 0 calc(var(--d) * 3px) rgb(210 101 92 / calc(var(--d) * 0.5)); transform: none; filter: none; }
+  45% {
+    text-shadow:
+      calc(var(--d) * 3px + 1px) 0 rgb(210 101 92 / 0.5),
+      calc(var(--d) * -3px - 1px) 0 rgb(169 191 223 / 0.5),
+      0 0 calc(var(--d) * 6px) rgb(210 101 92 / calc(var(--d) * 0.6));
+    transform: skewX(calc(var(--d) * -1.6deg));
+    filter: blur(calc(var(--d) * 0.9px));
+  }
+  50% {
+    text-shadow:
+      calc(var(--d) * -3px - 1.5px) 0 rgb(210 101 92 / 0.55),
+      calc(var(--d) * 3px + 1.5px) 0 rgb(169 191 223 / 0.55),
+      0 0 calc(var(--d) * 8px) rgb(210 101 92 / calc(var(--d) * 0.7));
+    transform: skewX(calc(var(--d) * 1.2deg));
+    filter: blur(calc(var(--d) * 1.2px));
+  }
+  55% { text-shadow: 0 0 calc(var(--d) * 3px) rgb(210 101 92 / calc(var(--d) * 0.5)); transform: none; filter: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .fx-shake,
   .fx-flicker,
-  .text-distort {
+  .text-distort,
+  .glyph-warp {
+    animation: none;
+  }
+}
+
+/* ───────── 엔딩 연출 (등급별, EndingFx.tsx) ───────── */
+
+.end-fx {
+  position: fixed;
+  inset: 0;
+  z-index: 21;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* 시작할 때 한 번 번쩍인다 */
+.end-flash {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  animation: end-flash 1.8s ease-out both;
+}
+.end-flash-bad { background: rgb(150 10 10); animation-duration: 1.4s; }
+.end-flash-neutral { background: rgb(160 165 175); animation-duration: 2.2s; }
+.end-flash-good { background: rgb(255 230 170); }
+.end-flash-true { background: rgb(255 250 230); animation-duration: 2.4s; }
+@keyframes end-flash {
+  0% { opacity: 0; }
+  10% { opacity: 0.55; }
+  100% { opacity: 0; }
+}
+
+/* 나쁜 엔딩: 가장자리부터 피가 차오르고, 위에서 핏방울이 흘러내린다 */
+.end-blood {
+  position: absolute;
+  inset: -4%;
+  background: radial-gradient(ellipse at 50% 45%, transparent 38%, rgb(96 4 6 / 0.7) 78%, rgb(60 0 2 / 0.92) 100%);
+  animation:
+    blood-creep 5s ease-out both,
+    blood-pulse 6s ease-in-out 5s infinite alternate;
+}
+@keyframes blood-creep {
+  from { opacity: 0; transform: scale(1.35); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes blood-pulse {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0.78; transform: scale(1.03); }
+}
+.end-drip {
+  position: absolute;
+  top: -2px;
+  height: 0;
+  border-radius: 0 0 999px 999px;
+  background: linear-gradient(180deg, rgb(70 4 6), rgb(142 18 20) 70%, rgb(170 28 28));
+  box-shadow: 0 0 10px rgb(120 10 12 / 0.7);
+  animation: drip ease-in both;
+}
+@keyframes drip {
+  from { height: 0; }
+  to { height: var(--len, 20vh); }
+}
+.ending-bad .ending-title {
+  animation:
+    title-in 1.2s ease-out both,
+    bleed-in 4s ease-out 1s both;
+}
+@keyframes bleed-in {
+  from { text-shadow: none; }
+  to {
+    color: rgb(214 120 112);
+    text-shadow:
+      0 2px 0 rgb(122 14 14),
+      0 7px 12px rgb(150 10 10 / 0.75),
+      0 0 30px rgb(168 50 44 / 0.6);
+  }
+}
+
+/* 보통 엔딩: 잿빛 안개가 천천히 흐른다 */
+.end-fog {
+  position: absolute;
+  inset: -10% -30%;
+  opacity: 0;
+  animation: fog-in 4s ease-out both, fog-drift 38s ease-in-out infinite alternate;
+}
+.end-fog-a {
+  background:
+    radial-gradient(ellipse 40% 30% at 20% 70%, rgb(150 156 166 / 0.3), transparent 70%),
+    radial-gradient(ellipse 50% 35% at 70% 30%, rgb(150 156 166 / 0.22), transparent 70%);
+}
+.end-fog-b {
+  background:
+    radial-gradient(ellipse 45% 30% at 80% 75%, rgb(170 175 185 / 0.24), transparent 70%),
+    radial-gradient(ellipse 40% 30% at 30% 20%, rgb(140 146 156 / 0.22), transparent 70%);
+  animation-duration: 4s, 55s;
+  animation-direction: normal, alternate-reverse;
+}
+@keyframes fog-in {
+  to { opacity: 1; }
+}
+@keyframes fog-drift {
+  from { transform: translateX(-6%); }
+  to { transform: translateX(6%); }
+}
+.ending-neutral .ending-title {
+  animation:
+    title-in 1.2s ease-out both,
+    fade-breath 7s ease-in-out 2s infinite;
+}
+@keyframes fade-breath {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+/* 좋은/진 엔딩: 아래에서 따뜻한 빛이 올라오고 알갱이가 떠오른다 */
+.end-dawn {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgb(212 176 106 / 0.3), rgb(212 176 106 / 0.08) 38%, transparent 62%);
+  animation: dawn-in 4s ease-out both;
+}
+.end-fx-true .end-dawn {
+  background:
+    radial-gradient(ellipse at 50% -8%, rgb(255 244 200 / 0.4), transparent 62%),
+    linear-gradient(to top, rgb(212 176 106 / 0.34), transparent 55%);
+}
+@keyframes dawn-in {
+  from { opacity: 0; transform: translateY(8%); }
+  to { opacity: 1; transform: none; }
+}
+/* 진엔딩: 위에서 빛줄기가 천천히 부채처럼 흔들린다 */
+.end-rays {
+  position: absolute;
+  top: -80vmax;
+  left: 50%;
+  width: 160vmax;
+  height: 160vmax;
+  margin-left: -80vmax;
+  background: repeating-conic-gradient(from 0deg at 50% 50%, rgb(255 240 190 / 0.1) 0deg 5deg, transparent 5deg 18deg);
+  mask-image: radial-gradient(circle at 50% 50%, #000 0%, transparent 38%);
+  opacity: 0;
+  animation: rays-in 5s ease-out both, rays-turn 90s linear infinite;
+}
+@keyframes rays-in {
+  to { opacity: 1; }
+}
+@keyframes rays-turn {
+  from { rotate: 0deg; }
+  to { rotate: 360deg; }
+}
+.end-mote {
+  position: absolute;
+  bottom: -2vh;
+  border-radius: 50%;
+  background: rgb(255 238 180);
+  box-shadow: 0 0 8px 2px rgb(255 226 150 / 0.7);
+  opacity: 0;
+  animation: mote-up linear infinite;
+}
+@keyframes mote-up {
+  0% { transform: translate(0, 0); opacity: 0; }
+  12% { opacity: 0.85; }
+  85% { opacity: 0.5; }
+  100% { transform: translate(2.5vw, -108vh); opacity: 0; }
+}
+.ending-good .ending-title {
+  text-shadow: 0 0 22px rgb(212 176 106 / 0.5);
+}
+.ending-true .ending-title {
+  color: transparent;
+  background: linear-gradient(100deg, rgb(212 176 106) 20%, rgb(255 247 220) 50%, rgb(212 176 106) 80%) 0 0 / 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation:
+    title-in 1.2s ease-out both,
+    title-shimmer 5s linear 1.4s infinite;
+}
+@keyframes title-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .end-flash,
+  .end-fog,
+  .end-rays,
+  .end-mote,
+  .end-blood {
+    animation: none;
+  }
+  .end-flash,
+  .end-mote {
+    display: none;
+  }
+  .end-fog,
+  .end-rays {
+    opacity: 1;
+  }
+  .end-drip {
+    animation: none;
+    height: var(--len, 20vh);
+  }
+  .ending-bad .ending-title,
+  .ending-neutral .ending-title,
+  .ending-true .ending-title {
     animation: none;
   }
 }

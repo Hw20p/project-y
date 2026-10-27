@@ -98,6 +98,8 @@ export interface RunState {
   vars: Record<string, string | number>
   nodeId: string
   time: number
+  /** 지금이 낮인지 밤인지 (장면의 `period`를 따라가고, 정해 두지 않은 장면은 앞의 것을 이어받는다) */
+  period: 'day' | 'night'
   flags: string[]
   players: RunPlayer[]
   phase: RunPhase

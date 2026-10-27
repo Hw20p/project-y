@@ -275,6 +275,7 @@ function stateKey(g: ScenarioGame, rel: Relevance): string {
     r.nodeId,
     r.phase,
     r.time,
+    r.period,
     sorted(r.flags),
     r.players
       .map((p) => {
@@ -352,7 +353,7 @@ class ComboSearch {
   }
 
   private bucketKey(g: ScenarioGame): string {
-    return this.strategy === "bfs" ? "all" : `${g.run.nodeId}|${g.run.phase}|${g.run.time}|${[...g.run.flags].sort().join(",")}`
+    return this.strategy === "bfs" ? "all" : `${g.run.nodeId}|${g.run.phase}|${g.run.time}|${g.run.period}|${[...g.run.flags].sort().join(",")}`
   }
 
   private add(g: ScenarioGame, parent: number, via: string, viaNode: string, depth: number): number {

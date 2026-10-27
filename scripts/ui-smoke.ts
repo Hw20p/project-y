@@ -208,10 +208,45 @@ try {
       assert.ok(!html2.includes('접기'), '4명까지는 접기 버튼이 없다')
     }
 
+    // 내 개인 행동은 끝났는데 다른 사람을 기다리는 화면: B7에는 이어지는 개인 단계가 없어서 시험용 밤으로 만든다
+    // (한 사람은 바로 끝나는 선택, 다른 사람은 이어지는 선택을 한다)
+    let sawWaiting = [...seen].some((x) => x.split('|')[4] === 'true')
+    {
+      const crew = [
+        { id: 'p1', name: '가', archetype: 'researcher' },
+        { id: 'p2', name: '나', archetype: 'field' },
+      ]
+      let ng = createScenarioGame(night, { seed: 1, players: crew })
+      const nact = (a: ScenarioAction) => (ng = reduceScenario(night, ng, a))
+      nact({ type: 'ready', playerId: 'p1' })
+      nact({ type: 'ready', playerId: 'p2' })
+      nact({ type: 'pick', playerId: 'p1', actionId: 'train' })
+      nact({ type: 'pick', playerId: 'p2', actionId: 'cellar' })
+      const nv = viewForScenario(night, ng, 'p1')
+      assert.equal(nv.scene?.mineDone, true, '시험용 밤: 내 행동은 끝났고 다른 사람을 기다린다')
+      const waitClient = {
+        view: nv,
+        send: () => {},
+        reading: [],
+        setReading: () => {},
+        online: { p1: true, p2: true },
+        roomCode: 'ABCD',
+        isHost: true,
+        reconnecting: false,
+        journalKey: 'ui-smoke-wait',
+        force: () => {},
+        retry: () => {},
+        rematch: () => {},
+      }
+      const nhtml = render(h(FxProvider as never, null, h(ScenarioScreen as never, { client: waitClient, onExit: () => {}, exitLabel: '나가기' })))
+      assert.ok(nhtml.length > 500 && !nhtml.includes('undefined') && !nhtml.includes('[object'), '개인 행동이 끝난 화면이 에러 없이 그려진다')
+      sawWaiting = true
+    }
+
     const phases = new Set([...seen].map((x) => x.split('|')[1]))
     for (const p of ['story', 'personal', 'split', 'vote', 'result', 'ended']) assert.ok(phases.has(p), `${p} 단계 화면을 그려 봤다`)
     assert.ok([...seen].some((x) => x.includes('|true|')), '개인 단계(혼자 진행)')
-    assert.ok([...seen].some((x) => x.split('|')[4] === 'true'), '개인 행동이 끝난 화면')
+    assert.ok(sawWaiting, '개인 행동이 끝난 화면')
     assert.ok([...seen].some((x) => x.endsWith('|true')), '여파가 있는 화면')
 
     // 대기실: 시나리오 고르기·입사 배경

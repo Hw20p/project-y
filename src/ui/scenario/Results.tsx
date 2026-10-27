@@ -51,7 +51,7 @@ function TieDraw({ draw, active }: { draw: NonNullable<ResultView['draw']>; acti
     let timer: ReturnType<typeof setTimeout>
     const run = () => {
       setCursor(step % n)
-      playSfx('vote')
+      playSfx(step >= ticks ? 'land' : 'draw')
       if (step >= ticks) {
         setLanded(true)
         return

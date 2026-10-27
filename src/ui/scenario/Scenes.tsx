@@ -95,7 +95,7 @@ export function ChoiceScene({ view, send, reading }: { view: ScenarioView; send:
     if (!ready || blocked) return
     const c = scene.choices.find((x) => x.id === id)
     if (!c || c.locked || (c.full && scene.myChoiceId !== id)) return
-    playSfx('vote')
+    playSfx(scene.myChoiceId === id ? 'cancel' : 'select')
     if (scene.myChoiceId === id) return send({ type: 'cancel' }) // 고른 것을 다시 누르면 취소
     send(isVote ? { type: 'vote', choiceId: id } : { type: 'pick', actionId: id })
   }
@@ -209,7 +209,7 @@ function SoloPanel({ view, send }: { view: ScenarioView; send: Send }) {
     if (!ready) return
     const c = solo.choices.find((x) => x.id === id)
     if (!c || c.locked) return
-    playSfx('vote')
+    playSfx('select')
     send({ type: 'solo', choiceId: id })
   }
   useDigitKeys(ready && !none, solo.choices, pick)
@@ -292,7 +292,7 @@ export function PersonalScene({ view, send, reading }: { view: ScenarioView; sen
     if (!ready || applied) return
     const c = scene.choices.find((x) => x.id === id)
     if (!c || c.locked) return
-    playSfx('vote')
+    playSfx(picked === id ? 'cancel' : 'select')
     if (picked === id) return send({ type: 'cancel' }) // 고른 것을 다시 누르면 취소
     send({ type: 'pick', actionId: id })
   }

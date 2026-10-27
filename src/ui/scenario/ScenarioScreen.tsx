@@ -1,15 +1,16 @@
 // 시나리오 모드의 게임 화면: 상단(시계·판 번호·엔딩 진행)·파티(스텟)·장면·정보 패널.
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { stripFx } from '../../scenario/fx.ts'
 import { needMoreChoiceIds, type ScenarioView } from '../../scenario/view.ts'
 import { ReadingContext, type ScenarioClient } from '../client.ts'
-import { FxSettingsBar, playSfx } from '../fx.tsx'
-import { DistortContext } from '../Narration.tsx'
+import { FxSettingsBar, playSfx, useMusic, type BgmId } from '../fx.tsx'
+import { DistortContext, distortAt } from '../Narration.tsx'
 import { loadJournal, pruneJournals, saveJournal, type JournalEntry } from '../storage.ts'
 import { BoardStrip } from './Board.tsx'
 import { ScenarioDrawer, type ScenarioTab } from './Drawer.tsx'
 import { ScenarioEnding } from './Ending.tsx'
-import { LightMeter, ScenarioParty } from './parts.tsx'
+import { EndingBackdrop } from './EndingFx.tsx'
+import { LightMeter, myClues, ScenarioParty } from './parts.tsx'
 import { ScenarioResultPanel, type Impact } from './Results.tsx'
 import { ChoiceScene, PersonalScene, StoryScene } from './Scenes.tsx'
 
@@ -99,18 +100,43 @@ export function ScenarioScreen({
   const lastLevel = useRef(lightLevel)
   const [blink, setBlink] = useState(0)
   useEffect(() => {
-    if (lightLevel > lastLevel.current) setBlink(Date.now())
+    if (lightLevel > lastLevel.current) {
+      setBlink(Date.now())
+      playSfx(view.light && lightLevel >= view.light.max ? 'blackout' : 'dim')
+    }
     lastLevel.current = lightLevel
-  }, [lightLevel])
+  }, [lightLevel, view.light])
+
+  // 낮과 밤이 바뀌는 순간 (처음 열 때는 소리 없이)
+  const period = view.timeOfDay?.period ?? null
+  const lastPeriod = useRef(period)
+  useEffect(() => {
+    if (period && lastPeriod.current && period !== lastPeriod.current) playSfx(period === 'night' ? 'dusk' : 'dawn')
+    lastPeriod.current = period
+  }, [period])
+
+  // 정보 패널을 여닫는 소리
+  const drawerOpen = drawer !== null
+  const lastDrawer = useRef(drawerOpen)
+  useEffect(() => {
+    if (drawerOpen !== lastDrawer.current) playSfx(drawerOpen ? 'open' : 'close')
+    lastDrawer.current = drawerOpen
+  }, [drawerOpen])
 
   // 분위기: 가장 약한 사람의 정신력이 낮을수록 가장자리가 붉어진다
   const lowest = Math.min(...view.players.map((p) => p.stats.sanity))
   const danger = Math.min(1, Math.max(0, (4 - lowest) / 4))
+  // 내 본문은 내 정신력만큼 번지고 갈라진다
+  const mySanity = view.players.find((p) => p.id === view.me.id)?.stats.sanity ?? lowest
+  const distort = useMemo(() => distortAt(mySanity), [mySanity])
 
   const ended = view.phase === 'ended'
   // 조명이 어두워진 정도(0~1): 화면이 가라앉는 만큼 글자는 야광처럼 빛난다
   const darkness = view.light && !ended ? Math.min(1, view.light.level / view.light.max) ** 0.9 : 0
   const night = view.timeOfDay?.period === 'night'
+  // 배경음: 엔딩 > 조명이 많이 어두움 > 밤 > 낮 (파일이 없는 곡은 조용하다)
+  const track: BgmId = ended ? 'ending' : darkness >= 0.5 ? 'dark' : night ? 'night' : 'day'
+  useMusic(track)
   const sceneKey = `${view.runNo}-${view.time}-${view.phase}-${view.scene?.title ?? ''}-${view.scene?.text.length ?? 0}`
   const resultKey = `${view.runNo}-${view.result?.nodeId}-${view.time}`
 
@@ -127,9 +153,13 @@ export function ScenarioScreen({
 
   return (
     <ReadingContext value={setReading}>
-     <DistortContext value={lowest <= 3}>
+     <DistortContext value={distort}>
       {view.timeOfDay && <div className="night-tint" style={{ opacity: night && !ended ? 1 : 0 }} aria-hidden />}
-      <div className="vignette" style={{ opacity: danger }} aria-hidden />
+      {/* 엔딩에서는 붉은 가장자리를 등급별 연출(EndingBackdrop)이 대신한다 */}
+      <div className="vignette" style={{ opacity: ended ? 0 : danger }} aria-hidden />
+      {ended && view.ending && (
+        <EndingBackdrop key={`${view.runNo}-${view.ending.id}`} tier={view.ending.tier} />
+      )}
       {view.light && !ended && (
         // 조명이 어두워질수록 화면 가장자리부터 깊게 가라앉는다
         <div className="light-dim" style={{ opacity: darkness }} aria-hidden />
@@ -147,7 +177,7 @@ export function ScenarioScreen({
               {(
                 [
                   ...(view.board ? ([['board', '조사 보드', 'Q', view.board.questions.filter((q) => q.solved).length]] as const) : []),
-                  ['clues', '단서·소지품', 'N', view.me.items.length + view.clues.length],
+                  ['clues', '단서·소지품', 'N', view.me.items.length + myClues(view).length],
                   ['entity', '자료', 'I', 0],
                 ] as const
               ).map(([id, label, key, count]) => (

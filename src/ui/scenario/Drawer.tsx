@@ -1,9 +1,9 @@
-// 시나리오 정보 패널. 위쪽 메뉴는 셋이다: 조사 보드 · 단서·소지품(이번 판 소지품과 알아낸 것, 지난 판까지의 단서 노트) ·
+// 시나리오 정보 패널. 위쪽 메뉴는 셋이다: 조사 보드(파티 전원의 단서) · 단서·소지품(내 아이템과 내가 얻은 단서, 지난 판까지의 단서 노트) ·
 // 자료(대상 정보와 지난 기록, 안에서 전환한다).
 import type { ScenarioView } from '../../scenario/view.ts'
 import type { JournalEntry } from '../storage.ts'
 import { BoardPanel } from './Board.tsx'
-import { clueWho } from './parts.tsx'
+import { myClues } from './parts.tsx'
 
 export type ScenarioTab = 'board' | 'clues' | 'entity' | 'journal'
 
@@ -24,12 +24,12 @@ export function ScenarioDrawer({
 }) {
   const e = view.entity
   // 나의 단서: 이번 판에서 내가 얻은 것 + 지난 판에서 단서 노트에 남은 것(이번 판에 다시 얻은 것은 위에 있으므로 뺀다)
-  const mine = view.clues.filter((c) => c.by.some((b) => b.id === view.me.id))
+  const mine = myClues(view)
   const past = view.notebook.filter((f) => !mine.some((c) => c.id === f.id))
   /** `on`: 이 메뉴가 켜져 있는 것으로 보이는 탭들 (자료는 대상 정보와 지난 기록을 함께 품는다) */
   const tabs: { id: ScenarioTab; label: string; key: string; badge?: number; on: ScenarioTab[] }[] = [
     ...(view.board ? [{ id: 'board' as const, label: '조사 보드', key: 'Q', on: ['board' as const] }] : []),
-    { id: 'clues', label: '단서·소지품', key: 'N', badge: view.me.items.length + view.clues.length, on: ['clues'] },
+    { id: 'clues', label: '단서·소지품', key: 'N', badge: view.me.items.length + mine.length, on: ['clues'] },
     { id: 'entity', label: '자료', key: 'I', on: ['entity', 'journal'] },
   ]
 
@@ -143,40 +143,22 @@ export function ScenarioDrawer({
           )}
 
           {tab === 'clues' && (
-            <div className="space-y-5">
-              {view.me.items.length === 0 && view.clues.length === 0 && <p className="text-sm text-ash">아직 없다.</p>}
-              {view.me.items.length > 0 && (
-                <div>
-                  <h3 className="mb-2 text-xs text-ash">아이템</h3>
-                  <ul className="space-y-3">
-                    {view.me.items.map((item) => (
-                      <li key={item.id}>
-                        <span className="text-bone">{item.name}</span>
-                        <p className="font-serif-kr text-sm leading-7 text-fog">{item.text}</p>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+            <div>
+              <h3 className="mb-2 text-xs text-ash">아이템</h3>
+              {view.me.items.length === 0 ? (
+                <p className="text-sm text-ash">아직 없다.</p>
+              ) : (
+                <ul className="space-y-3">
+                  {view.me.items.map((item) => (
+                    <li key={item.id}>
+                      <span className="text-bone">{item.name}</span>
+                      <p className="font-serif-kr text-sm leading-7 text-fog">{item.text}</p>
+                    </li>
+                  ))}
+                </ul>
               )}
-              {view.clues.length > 0 && (
-                <div>
-                  <h3 className="mb-2 text-xs text-ash">모든 단서</h3>
-                  <ul className="space-y-2">
-                    {view.clues.map((c) => (
-                      <li key={c.id} className="font-serif-kr text-sm leading-7 text-glow">
-                        ◆ {c.text}
-                        <span className="ml-2 font-sans text-xs text-ash">{clueWho(c.by, view)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
-
-          {tab === 'clues' && (
-            <div className="mt-8 border-t border-edge pt-6">
-              <h3 className="mb-2 text-xs text-ash">나의 단서</h3>
+              <h3 className="mb-1 mt-8 border-t border-edge pt-6 text-xs text-ash">나의 단서</h3>
+              <p className="mb-2 text-xs text-ash/70">파티원이 얻은 단서는 조사 보드에서 이름과 함께 볼 수 있다.</p>
               <ul className="space-y-2">
                 {mine.length === 0 && past.length === 0 && <li className="text-sm text-ash">아직 없다.</li>}
                 {/* 이번 판에서 내가 얻은 단서, 그리고 지난 판에서 노트에 남은 단서 */}

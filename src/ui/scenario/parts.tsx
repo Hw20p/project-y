@@ -3,10 +3,14 @@ import { useState } from 'react'
 import type { Change } from '../../scenario/state.ts'
 import { ARCHETYPES, STAT_LABEL, STAT_MAX } from '../../scenario/stats.ts'
 import type { ScenarioView } from '../../scenario/view.ts'
+import { playSfx } from '../fx.tsx'
 
 export const signed = (n: number): string => (n > 0 ? `+${n}` : `${n}`)
 
-export const archetypeName = (id: string): string => ARCHETYPES.find((a) => a.id === id)?.name ?? id
+/** 이번 판에서 내가 얻은 단서. 파티원이 얻은 단서는 조사 보드에서 본다. */
+export const myClues = (view: ScenarioView) => view.clues.filter((c) => c.by.some((b) => b.id === view.me.id))
+
+export const archetypeName =(id: string): string => ARCHETYPES.find((a) => a.id === id)?.name ?? id
 
 type Tone = 'gain' | 'loss' | 'glow' | 'amber'
 
@@ -141,7 +145,10 @@ export function Continue({
         <button
           type="button"
           disabled={me.ready}
-          onClick={onClick}
+          onClick={() => {
+            playSfx('ready')
+            onClick()
+          }}
           className="flex-1 rounded border border-glow/50 bg-glow/10 px-5 py-3 text-sm text-glow transition hover:bg-glow/20 disabled:cursor-default disabled:border-edge disabled:bg-transparent disabled:text-ash sm:flex-none sm:py-2"
         >
           {me.ready ? '다른 사람을 기다리는 중' : label}
