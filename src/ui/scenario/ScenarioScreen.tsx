@@ -21,7 +21,7 @@ function toJournal(view: ScenarioView): JournalEntry | null {
   const r = view.result
   if (!r) return null
   const label =
-    r.kind === 'vote' ? `추리 · ${r.choiceText ?? ''}` : r.kind === 'split' ? '조합' : '개인 행동'
+    r.kind === 'vote' ? `추리 · ${r.choiceText ?? ''}` : r.kind === 'split' ? (r.label ?? '조합') : '개인 행동'
   const parts = [stripFx(r.text), stripFx(r.mine?.text ?? '').replace(/\n/g, ' ')].filter(Boolean)
   if (parts.length === 0) return null
   return {

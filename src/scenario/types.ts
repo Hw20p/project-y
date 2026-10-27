@@ -154,6 +154,11 @@ export interface VoteChoice {
 export interface VoteNode extends NodeBase {
   kind: 'vote'
   text: Text
+  /**
+   * true면 선택지 순서가 판마다 섞인다. 순서는 판의 시드로 정해져서 모두에게 같게 보이고,
+   * 같은 판에서는 다시 그려도 바뀌지 않는다. 맞는 보기가 늘 첫 번째에 있지 않게 하려는 장치다.
+   */
+  shuffle?: boolean
   choices: VoteChoice[]
 }
 
@@ -203,6 +208,13 @@ export interface SplitOutcome {
 /** 각자 다른 행동을 동시에 고른다. 한 사람이 하나씩 고르고, 모두의 **조합**이 결과를 정한다. */
 export interface SplitNode extends NodeBase {
   kind: 'split'
+  /**
+   * 화면에 보이는 장면 이름 (기본 "조합"). 모두의 조합이 결과를 정하지 않고 각자 자기 몫을 하는 장면(조사)은 "조사"로 쓴다.
+   * 결과 화면의 제목("조사 결과")과 지난 기록의 이름도 이것을 따른다.
+   */
+  label?: string
+  /** 장면 이름 옆의 한 줄 설명 (기본: "각자 다른 행동을 고르고, 모두의 조합이 결과를 정한다") */
+  hint?: string
   text: Text
   actions: SplitAction[]
   /** 행동을 고른 사람에게만 보이는 발견 (사람마다 다른 정보) */

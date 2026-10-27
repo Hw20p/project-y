@@ -186,17 +186,17 @@ function trade(g: ScenarioGame, put: string, press: string, change: string): Sce
   }
   // 받는 것: 혼자는 1단계에서 하나씩만 얻는다 → 한 번 넘기면 2단계에 혼자 쓰는 조사가 열린다
   let solo = toProbe(1, 'item')
-  assert.deepEqual(choiceIds(solo), ['graffiti', 'receipt', 'item-wait'], '처음에는 1단계 조사만')
+  assert.deepEqual(choiceIds(solo), ['graffiti', 'receipt', 'trash', 'display', 'cabinet', 'item-wait'], '처음에는 1단계 조사만 (알아낼 것이 없는 곳·아이템을 얻는 곳 포함)')
   solo = settle(pickEach(solo, {}, 'graffiti'))
   assert.equal(solo.run.nodeId, 'item-think')
   solo = settle(voteAll(solo, 'item-pass'))
   assert.equal(solo.run.time, 1)
   assert.equal(solo.run.nodeId, 'item-night', '패스하면 밤이 온다')
   solo = settle(pickEach(solo, {}, 'coffee'))
-  assert.deepEqual(choiceIds(solo), ['receipt', 'slot', 'tray-solo', 'item-wait'], '혼자: 둘이 하는 조사 대신 혼자 쓰는 조사')
+  assert.deepEqual(choiceIds(solo), ['receipt', 'trash', 'display', 'cabinet', 'slot', 'tray-solo', 'item-wait'], '혼자: 둘이 하는 조사 대신 혼자 쓰는 조사')
   let duo = toProbe(2, 'item')
   duo = settle(pickEach(settle(voteAll(pickEach(duo, {}, 'item-wait'), 'item-pass')), {}, 'coffee'))
-  assert.deepEqual(choiceIds(duo), ['graffiti', 'receipt', 'slot', 'tray-pair', 'item-wait'], '둘: 함께하는 조사가 열리고 혼자 쓰는 조사는 없다')
+  assert.deepEqual(choiceIds(duo), ['graffiti', 'receipt', 'trash', 'display', 'cabinet', 'slot', 'tray-pair', 'item-wait'], '둘: 함께하는 조사가 열리고 혼자 쓰는 조사는 없다')
   assert.equal(view(duo).scene!.choices.find((c) => c.id === 'tray-pair')!.min, 2)
   // 버튼: 혼자는 직접 확인(정신력이 든다), 둘은 함께 비교(대가 없음)
   let btn = toProbe(1, 'button')
@@ -341,21 +341,25 @@ function trade(g: ScenarioGame, put: string, press: string, change: string): Sce
   console.log('통과: 단서 공개와 지금 과제 표시')
 }
 
-// 11) 오답 뒤의 밤: 과제의 단서·아이템 선택지가 나오고(이미 아는 단서는 숨는다), 아이템은 얻은 사람의 조사를 열어 준다.
-//     과제를 푼 뒤의 휴식에는 스텟 선택지뿐이다.
+// 11) 오답 뒤의 밤: 과제의 단서 선택지가 나오고(이미 아는 단서는 숨는다), 아이템은 낮의 조사에서만 얻는다.
+//     밤에는 가진 아이템을 쓰는 선택지만 있다. 과제를 푼 뒤의 휴식에는 스텟 선택지뿐이다.
 {
   const r: Run = { ...RUN, order: 'item>button>change' } // 오늘 받는 것은 낡은 동전, 어제는 사원증
   let g = start(2, r)
   for (const node of ['arrive', 'first-look', 'item-intro']) g = node === 'first-look' ? settle(pickEach(g, {}, 'pocket')) : ready(g)
-  g = voteAll(reasonTo(pickEach(g, {}, 'item-wait'), 3), 'item-badge') // 사원증이라고 걸었다가 틀렸다
+  g = settle(pickEach(g, { 1: 'cabinet' }, 'item-wait')) // 한 명이 낮에 서랍에서 플래시를 얻는다
+  assert.deepEqual(g.run.players.map((p) => p.items.includes('flash')), [false, true], '낮의 조사로 플래시를 얻었다')
+  g = voteAll(reasonTo(g, 3), 'item-badge') // 사원증이라고 걸었다가 틀렸다
   g = settle(g)
   assert.equal(g.run.nodeId, 'item-night')
-  // 어제 받은 것(사원증)이 아니라는 것은 오답으로 이미 밝혀졌으므로 "투입구 소리" 선택지는 숨는다
-  assert.deepEqual(choiceIds(g), ['dates-coin', 'drawer', 'coffee', 'study'])
-  g = settle(pickEach(g, { 0: 'dates-coin', 1: 'drawer' }, 'coffee'))
+  // 어제 받은 것(사원증)이 아니라는 것은 오답으로 이미 밝혀졌으므로 "투입구 소리" 선택지는 숨는다. 밤에는 아이템을 얻는 선택지가 없다.
+  assert.deepEqual(choiceIds(g), ['dates-coin', 'coffee', 'study'])
+  assert.ok(choiceIds(g, 'p2').includes('lit-night-coin') && !choiceIds(g, 'p1').includes('lit-night-coin'), '플래시를 쓰는 밤 선택지는 가진 사람에게만 보인다')
+  g = settle(pickEach(g, { 0: 'dates-coin' }, 'coffee'))
   assert.equal(g.run.nodeId, 'item-probe')
   assert.deepEqual(view(g, 'p2').clues.filter((c) => c.id === 'night-last-coin').map((c) => c.by.map((b) => b.id)), [['p1']])
-  assert.ok(choiceIds(g, 'p2').includes('lit') && !choiceIds(g, 'p1').includes('lit'), '플래시를 가진 사람에게만 열린다')
+  assert.ok(choiceIds(g, 'p2').includes('lit') && !choiceIds(g, 'p1').includes('lit'), '플래시를 가진 사람에게만 낮의 조사도 열린다')
+  assert.ok(!choiceIds(g, 'p1').includes('cabinet') && !choiceIds(g, 'p2').includes('cabinet'), '누가 플래시를 가졌으면 서랍은 보이지 않는다')
   const lit = settle(pickEach(g, { 1: 'lit' }, 'item-wait'))
   assert.ok(view(lit).clues.some((c) => c.id === 'today-coin' && c.by.some((b) => b.id === 'p2')))
 
@@ -406,7 +410,7 @@ function trade(g: ScenarioGame, put: string, press: string, change: string): Sce
   assert.deepEqual(choiceIds(blind), ['item-reason', 'item-pass'])
   let g = voteAll(blind, 'item-reason')
   assert.equal(g.run.nodeId, 'item-c1')
-  assert.deepEqual(choiceIds(g), ['rule-cycle', 'rule-random', 'rule-same', 'rule-price'])
+  assert.deepEqual([...choiceIds(g)].sort(), ['rule-cycle', 'rule-mood', 'rule-price', 'rule-random', 'rule-same'], '보기 순서는 판마다 섞이므로 목록만 본다')
   assert.equal(view(g).scene!.title, '받는 것 · 추리 1/4')
   // 단서 없이 맞히면 근거가 아니라 감이었다고 밝혀진다. 맞게 짚는 동안 시계는 그대로다.
   g = voteAll(g, 'rule-cycle')
@@ -465,4 +469,47 @@ function trade(g: ScenarioGame, put: string, press: string, change: string): Sce
   assert.equal(q.run.nodeId, 'item-c4')
   assert.match(text(q), /사원증은 이미 아니라고 밝혀졌다/)
   console.log('통과: 받는 것의 추리 사슬 (4단계·근거 이야기·틀리면 그 시도 종료)')
+}
+
+// 14) 조사: 알아낼 것이 없는 곳은 단서 없이 이야기만 남기고, 휴지통 종이는 영수증과 같은 단서(어제의 거래)를 준다
+{
+  const r: Run = { ...RUN, order: 'item>button>change' } // 오늘 받는 것은 낡은 동전, 어제는 사원증
+  const toProbe = (picks: Record<number, string>) => {
+    let g = start(2, r)
+    for (const node of ['arrive', 'first-look', 'item-intro']) g = node === 'first-look' ? settle(pickEach(g, {}, 'pocket')) : ready(g)
+    return pickEach(g, picks, 'item-wait')
+  }
+  const g = toProbe({ 0: 'display', 1: 'trash' })
+  assert.match(view(g, 'p1').result!.mine!.text, /의미를 읽어 낼 수 없었다/)
+  assert.ok(!g.run.players[0].facts.some((f) => f.startsWith('yday-')), '표시등에서는 단서가 나오지 않는다')
+  assert.ok(g.run.players[1].facts.includes('yday-coin'), '휴지통의 종이에서도 어제의 거래가 나온다')
+  assert.match(view(g, 'p2').result!.mine!.text, /어제: 사원증/)
+  console.log('통과: 자판기 조사 — 알아낼 것이 없는 곳과 같은 단서에 이르는 다른 길')
+}
+
+// 15) 아이템: 낮의 조사에서만 얻고, 밤에는 쓰는 선택지만 있다 (버튼의 장갑·거스름돈의 집게)
+{
+  const toNight = (order: string, task: 'button' | 'change', wrong: string, dayPicks: Record<number, string>) => {
+    const r: Run = { ...RUN, order }
+    let g = start(2, r)
+    for (const node of ['arrive', 'first-look', `${task}-intro`]) g = node === 'first-look' ? settle(pickEach(g, {}, 'pocket')) : ready(g)
+    g = settle(pickEach(g, dayPicks, `${task}-wait`))
+    g = settle(voteAll(g, wrong))
+    assert.equal(g.run.nodeId, `${task}-night`)
+    return g
+  }
+  // 버튼: 정비 서랍에서 장갑을 얻고, 밤에 장갑을 끼고 초록 선을 확인한다 (둘째 과제로 두고 첫 과제를 건너뛰려면 순서만 정하면 된다)
+  const b = toNight('button>item>change', 'button', 'button-pass', { 0: 'toolbox' })
+  assert.deepEqual(b.run.players.map((p) => p.items.includes('glove')), [true, false], '낮의 조사로 장갑을 얻었다')
+  assert.deepEqual(choiceIds(b).filter((x) => x === 'drawer'), [], '밤에는 아이템을 얻는 선택지가 없다')
+  assert.ok(choiceIds(b, 'p1').some((x) => x.startsWith('glove-night-')) && !choiceIds(b, 'p2').some((x) => x.startsWith('glove-night-')), '장갑을 쓰는 선택지는 가진 사람에게만 보인다')
+  const bn = settle(pickEach(b, { 0: choiceIds(b, 'p1').find((x) => x.startsWith('glove-night-'))! }, 'coffee'))
+  assert.ok(bn.run.players[0].facts.includes('green-at-A'), '밤에 장갑으로 초록 선의 끝을 알아낸다')
+  // 거스름돈: 공구함에서 집게를 얻고, 밤에 집게로 장부를 지켜본다
+  const c = toNight('change>item>button', 'change', 'change-pass', { 1: 'toolbox' })
+  assert.deepEqual(c.run.players.map((p) => p.items.includes('tongs')), [false, true], '낮의 조사로 집게를 얻었다')
+  assert.ok(choiceIds(c, 'p2').includes('tongs-night') && !choiceIds(c, 'p1').includes('tongs-night'))
+  const cn = settle(pickEach(c, { 1: 'tongs-night' }, 'coffee'))
+  assert.ok(cn.run.players[1].facts.includes('change-moved'))
+  console.log('통과: 아이템은 낮의 조사에서만 얻고 밤에는 쓰기만 한다 (장갑·집게)')
 }

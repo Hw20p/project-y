@@ -514,6 +514,7 @@ function resolveSplit(sc: Scenario, g: ScenarioGame, node: SplitNode): void {
   run.result = {
     kind: 'split',
     nodeId: node.id,
+    ...(node.label ? { label: node.label } : {}),
     picks,
     options: node.actions.map((a) => ({ id: a.id, text: evalText(a.text, { run }) })),
     text,

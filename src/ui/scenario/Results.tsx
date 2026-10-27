@@ -152,7 +152,7 @@ export function ScenarioResultPanel({
   useImpactOnce(seq.i >= at.chips, impactOfChanges(allChanges, view.me.id), onImpact)
 
   const label =
-    result.kind === 'vote' ? '투표 결과' : result.kind === 'split' ? '조합 결과' : '개인 행동의 결과'
+    result.kind === 'vote' ? '투표 결과' : result.kind === 'split' ? `${result.label ?? '조합'} 결과` : '개인 행동의 결과'
 
   // 투표: 선택지별 득표
   const voteRows =

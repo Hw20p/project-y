@@ -88,6 +88,9 @@ export interface SceneView {
   text: string
   /** 이야기 장면: 'success'면 성공 표시를 보인다 */
   tone?: 'success'
+  /** 분할 장면의 이름("조사" 등)과 한 줄 설명. 없으면 "조합 · 각자 다른 행동을 고르고, 모두의 조합이 결과를 정한다" */
+  label?: string
+  hint?: string
   choices: SceneChoiceView[]
   /** 내가 지금 고른 선택지·행동 */
   myChoiceId: string | null
@@ -178,6 +181,21 @@ function growthHints(effects: Effect[] | undefined): string[] {
 
 const BASE_SCENE = { choices: [], myChoiceId: null, solo: null, mineDone: false, myLines: [] } satisfies Partial<SceneView>
 
+/** 투표 선택지의 섞인 순서를 정하는 값: 판의 시드·장면·선택지로 정해지므로 모두에게 같고, 다시 그려도 바뀌지 않는다 */
+function orderKey(seed: number, nodeId: string, choiceId: string): number {
+  let h = (seed ^ 2166136261) >>> 0
+  for (const ch of `${nodeId}:${choiceId}`) h = Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0
+  h = Math.imul(h ^ (h >>> 15), 0x85ebca6b) >>> 0
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35) >>> 0
+  return (h ^ (h >>> 16)) >>> 0
+}
+
+/** `shuffle`인 투표 장면의 선택지를 판마다 다른 순서로 놓는다 */
+function shuffled(node: { id: string; shuffle?: boolean }, seed: number, shown: SceneChoiceView[]): SceneChoiceView[] {
+  if (!node.shuffle) return shown
+  return [...shown].sort((a, b) => orderKey(seed, node.id, a.id) - orderKey(seed, node.id, b.id))
+}
+
 /** 분할 장면에서 함께할 사람이 더 필요한 행동들 (고른 사람이 있지만 최소 인원에 못 미친다). 있으면 장면이 진행되지 않는다. */
 export function needMoreChoiceIds(scene: SceneView | null): string[] {
   if (scene?.kind !== 'split') return []
@@ -208,11 +226,15 @@ export function viewForScenario(sc: Scenario, g: ScenarioGame, playerId: string)
       kind: 'vote',
       title: node.title,
       text: evalText(node.text, ctx),
-      choices: node.choices.flatMap((c): SceneChoiceView[] => {
-        const pickerIds = run.players.filter((p) => run.votes[p.id] === c.id).map((p) => p.id)
-        if (openIds.has(c.id)) return [{ id: c.id, text: evalText(c.text, ctx), pickerIds, full: false }]
-        return c.locked ? [{ id: c.id, text: evalText(c.text, ctx), locked: c.locked, pickerIds: [], full: false }] : []
-      }),
+      choices: shuffled(
+        node,
+        run.seed,
+        node.choices.flatMap((c): SceneChoiceView[] => {
+          const pickerIds = run.players.filter((p) => run.votes[p.id] === c.id).map((p) => p.id)
+          if (openIds.has(c.id)) return [{ id: c.id, text: evalText(c.text, ctx), pickerIds, full: false }]
+          return c.locked ? [{ id: c.id, text: evalText(c.text, ctx), locked: c.locked, pickerIds: [], full: false }] : []
+        }),
+      ),
       myChoiceId: run.votes[playerId] ?? null,
     }
   } else if (node.kind === 'split' && run.phase === 'split') {
@@ -220,6 +242,8 @@ export function viewForScenario(sc: Scenario, g: ScenarioGame, playerId: string)
       ...BASE_SCENE,
       kind: 'split',
       title: node.title,
+      ...(node.label ? { label: node.label } : {}),
+      ...(node.hint ? { hint: node.hint } : {}),
       text: evalText(node.text, ctx),
       choices: node.actions.flatMap((a): SceneChoiceView[] => {
         const st = actionState(g, a, playerId)

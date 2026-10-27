@@ -72,6 +72,8 @@ export interface PendingEffects {
 export interface ScenarioResult {
   kind: 'vote' | 'split' | 'personal'
   nodeId: string
+  /** 분할 장면의 이름("조사" 등). 없으면 "조합" */
+  label?: string
   /** 투표 장면에서 이긴 선택지의 문장 */
   choiceText?: string
   /** 투표가 동률이라 무작위로 하나가 뽑혔을 때: 동률이던 선택지들과 뽑힌 것의 문장 (화면의 추첨 연출에 쓴다) */

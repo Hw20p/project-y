@@ -14,7 +14,7 @@ const KIND_LABEL = {
   story: '',
   vote: '추리 · 다 같이 하나를 고른다',
   split: '조합 · 각자 다른 행동을 고르고, 모두의 조합이 결과를 정한다',
-  personal: '개인 행동 · 모두 고르면 각자 고른 것이 자기에게 적용된다',
+  personal: '개인 행동 · 각자 하나씩 고른다 (같은 것을 골라도 된다)',
 } as const
 
 /** 지난 선택의 여파(`later`와 진입 효과)를 장면 위에 보인다 */
@@ -32,11 +32,11 @@ function Aftermath({ view }: { view: ScenarioView }) {
 
 function Header({ view }: { view: ScenarioView }) {
   const scene = view.scene!
+  // 분할 장면은 장면 정의가 이름("조사")과 설명을 정할 수 있다
+  const kindLabel = scene.kind === 'split' && scene.label ? `${scene.label}${scene.hint ? ` · ${scene.hint}` : ''}` : KIND_LABEL[scene.kind]
   return (
     <>
-      {KIND_LABEL[scene.kind] && (
-        <p className={`text-xs tracking-widest ${scene.kind === 'personal' ? 'text-glow' : 'text-ash'}`}>{KIND_LABEL[scene.kind]}</p>
-      )}
+      {kindLabel && <p className={`text-xs tracking-widest ${scene.kind === 'personal' ? 'text-glow' : 'text-ash'}`}>{kindLabel}</p>}
       {scene.title && <h2 className="mt-1 font-serif-kr text-xl font-bold">{scene.title}</h2>}
     </>
   )

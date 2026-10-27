@@ -77,6 +77,10 @@ type NightMake = Pick<PersonalOption, 'result' | 'effects' | 'later'>
  */
 const byPriceNight = (id: string, text: string, fact: (p: ItemId) => string, make: (p: ItemId) => NightMake): PersonalOption[] =>
   ITEM_ORDER.map((p) => ({ id: `${id}-${p}`, text, when: { all: [priceIs(p), { not: { knows: fact(p) } }] }, ...make(p) }))
+/** 밤에는 아이템을 얻을 수 없다. 가진 아이템을 쓰는 선택지는 그 아이템을 가진 사람에게만 보인다. */
+const withItem =
+  (item: string) =>
+  (o: PersonalOption): PersonalOption => ({ ...o, when: { all: [{ item, by: 'actor' }, ...(o.when ? [o.when] : [])] } as Cond })
 /** 눌러야 할 칸과 전선 방식에 따라 결과가 다른 밤 선택지 (위와 같다) */
 const byWiringNight = (id: string, text: string, fact: (w: ReturnType<typeof wiringOf>) => string, make: (w: ReturnType<typeof wiringOf>) => NightMake): PersonalOption[] =>
   BUTTON_ORDER.flatMap((b) =>
@@ -96,8 +100,8 @@ const SLOT_TEXT: Record<ItemId, string> = {
 const SHAPE: Record<ItemId, string> = { coin: '작고 둥근 홈', photo: '얇고 긴 홈', badge: '두껍고 단단한 홈' }
 
 /**
- * 받는 것의 추리 사슬: 규칙 → 도는 방향 → 어제 → 오늘. 단계마다 근거가 된 단서가 이야기로 밝혀진다.
- * 근거가 없으면(그 단서를 아무도 얻지 못했으면) 맞혀도 "감이었다"가 된다.
+ * 받는 것의 추리 사슬: 규칙 → 도는 방향 → 어제 → 오늘. 보기는 판마다 순서가 섞이고, 틀린 보기도 그럴듯하다.
+ * 단계마다 근거가 된 단서가 이야기로 밝혀진다 (그 단서를 아무도 얻지 못했으면 "감").
  */
 function itemChain(): ChainStep[] {
   const knows = (id: string): Cond => ({ knows: id })
@@ -114,19 +118,25 @@ function itemChain(): ChainStep[] {
           id: 'rule-random',
           text: '그날그날 무작위다',
           right: false,
-          wrong: miss('“무작위다.” 그렇게 결론짓고 투입구 앞에 아무것이나 가져다 댔다.', '무작위라면 전임자들의 낙서가 그렇게 같은 순서로 되풀이될 리 없다. 규칙을 잘못 짚으니 그 위에 쌓은 것이 모두 무너졌다.'),
+          wrong: miss('“무작위다.” 주머니에서 아무것이나 꺼내 투입구 앞에 댔다.', '무작위로 짚어서는 이 기계가 받아 주지 않는다.'),
         },
         {
           id: 'rule-same',
           text: '늘 같은 것만 받는다',
           right: false,
-          wrong: miss('“늘 같은 것이다.” 어제와 같은 것을 내밀자 투입구가 입을 꾹 다물었다.', '어제 받은 것을 오늘은 받지 않는다. 늘 같은 것이었다면 이 기계는 벌써 멈췄을 것이다.'),
+          wrong: miss('“늘 같은 것이다.” 가장 만만한 것을 내밀었다.', '투입구가 입을 꾹 다물었다. 그렇게 단순한 기계가 아니다.'),
         },
         {
           id: 'rule-price',
           text: '값나가는 것부터 차례로 빼앗는다',
           right: false,
-          wrong: miss('“값나가는 것부터다.” 사원증을 먼저 내밀었다.', '자판기는 값을 매기지 않는다. 순서를 따를 뿐이다.'),
+          wrong: miss('“값나가는 것부터다.” 가장 귀한 것을 먼저 내밀었다.', '자판기는 값을 매기지 않는다. 기대한 대로 되지 않았다.'),
+        },
+        {
+          id: 'rule-mood',
+          text: '표시등의 색에 따라 다르다',
+          right: false,
+          wrong: miss('“표시등의 색을 따른다.” 불빛이 바뀌기를 기다렸다.', '표시등은 처음부터 끝까지 같은 푸른색이었다. 기다린 시간만 흘렀다.'),
         },
       ],
       ok: [
@@ -145,13 +155,19 @@ function itemChain(): ChainStep[] {
           id: 'dir-down',
           text: '소중한 것에서 가벼운 것으로 — 사원증, 사진, 동전, 다시 사원증',
           right: false,
-          wrong: miss('“소중한 것부터 내려간다.” 순서를 거꾸로 짚었다.', '투입구가 거꾸로 돌아가는 소리를 냈다. 이 기계는 거꾸로 가지 않는다.'),
+          wrong: miss('“소중한 것부터 내려간다.” 사원증부터 차례를 따졌다.', '투입구가 어긋난 박자로 달각거렸다. 순서를 잘못 짚었다.'),
         },
         {
           id: 'dir-mine',
           text: '거래하는 사람이 가장 아끼는 것부터',
           right: false,
-          wrong: miss('“가장 아끼는 것부터다.” 주머니 속에서 가장 아끼는 것을 쥐었다.', '자판기는 사람의 마음을 읽지 않는다. 읽는 것은 순서뿐이다.'),
+          wrong: miss('“가장 아끼는 것부터다.” 주머니 속에서 가장 아끼는 것을 쥐었다.', '자판기는 사람의 마음을 읽지 않는다.'),
+        },
+        {
+          id: 'dir-alpha',
+          text: '품목 이름의 가나다 순서',
+          right: false,
+          wrong: miss('“이름 순서다.” 이름을 소리 내어 읽으며 차례를 매겼다.', '표시등이 깜빡이기만 했다. 이름은 이 기계에 아무 의미가 없다.'),
         },
       ],
       ok: [
@@ -174,20 +190,14 @@ function itemChain(): ChainStep[] {
       ),
       ok: ITEM_ORDER.flatMap((p) => {
         const y = itemLabel(yesterdayOf(p))
-        return [
-          {
-            text: `영수증이 근거였다. 맨 윗줄에 어제 날짜의 거래가 한 줄 찍혀 있었다. “어제: ${y}.” 어제 자판기가 받은 것은 ${y}이다.`,
-            when: all(priceIs(p), knows(`yday-${p}`)),
-          },
-          {
-            text: `벽 맨 위쪽, 가장 최근 날짜 옆의 글씨가 근거였다. 어제 거래한 사람이 남긴 글씨다. “${y}.” 어제 자판기가 받은 것은 ${y}이다.`,
-            when: all(priceIs(p), no(`yday-${p}`), knows(`night-last-${p}`)),
-          },
-          {
-            text: '어제의 기록은 어디서도 찾지 못했다. 이것은 근거가 아니라 감이다. 그런데도 이상하게 확신이 든다.',
-            when: all(priceIs(p), no(`yday-${p}`), no(`night-last-${p}`)),
-          },
-        ]
+        return firstOf2(
+          [
+            [knows(`yday-${p}`), `영수증이 근거였다. 맨 윗줄에 어제 날짜의 거래가 한 줄 찍혀 있었다. “어제: ${y}.” 어제 자판기가 받은 것은 ${y}이다.`],
+            [knows(`night-last-${p}`), `벽 맨 위쪽, 가장 최근 날짜 옆의 글씨가 근거였다. 어제 거래한 사람이 남긴 글씨다. “${y}.” 어제 자판기가 받은 것은 ${y}이다.`],
+          ],
+          '어제의 기록은 어디서도 찾지 못했다. 이것은 근거가 아니라 감이다. 그런데도 이상하게 확신이 든다.',
+          priceIs(p),
+        )
       }),
     },
     {
@@ -218,6 +228,18 @@ function itemChain(): ChainStep[] {
   ]
 }
 
+/** 위에서부터 처음 맞는 근거 하나만 보이는 조각들 (맞는 것이 없으면 `fallback`). `base`가 있으면 그 조건에서만 보인다. */
+function firstOf2(cases: [Cond, string][], fallback: string, base?: Cond): { text: string; when: Cond }[] {
+  const pre = base ? [base] : []
+  const earlier: Cond[] = []
+  const pieces = cases.map(([when, text]) => {
+    const piece = { text, when: { all: [...pre, ...earlier.map((c): Cond => ({ not: c })), when] } as Cond }
+    earlier.push(when)
+    return piece
+  })
+  return [...pieces, { text: fallback, when: { all: [...pre, ...earlier.map((c): Cond => ({ not: c }))] } as Cond }]
+}
+
 const item: TaskDef = {
   id: 'item',
   title: '받는 것',
@@ -245,6 +267,40 @@ const item: TaskDef = {
         text: `바닥의 영수증은 아직 따뜻하다. 맨 윗줄에 어제 날짜의 거래가 한 줄 인쇄되어 있다.\n“어제: ${itemLabel(yesterdayOf(p))}.”`,
         effects: [learn(`yday-${p}`)],
       })),
+    },
+    {
+      // 영수증과 같은 단서에 이르는 다른 길 (대가는 없다). 둘이 나눠 맡으면 같은 것을 두 번 얻는 셈이 된다.
+      id: 'trash',
+      text: '휴지통 바닥의 구겨진 종이를 편다',
+      tier: 1,
+      findings: byPrice((p) => ({
+        text: `구겨진 종이는 누군가 버린 거래 내역이다. 마지막 줄에 품목이 한 줄 찍혀 있다.\n“어제: ${itemLabel(yesterdayOf(p))}.”`,
+        effects: [learn(`yday-${p}`)],
+      })),
+    },
+    {
+      // 알아낼 것이 없는 곳: 한 라운드에 한 곳만 살필 수 있으므로 여기를 고르면 그만큼 놓친다.
+      id: 'display',
+      text: '자판기 표시등의 숫자를 읽는다',
+      tier: 1,
+      findings: [
+        {
+          text: '표시등에는 “0 0 0”이 떠 있다. 몇 번을 다시 읽어도 숫자는 바뀌지 않는다. 의미를 읽어 낼 수 없었다.',
+        },
+      ],
+    },
+    {
+      // 아이템은 낮의 조사에서만 얻는다. 이미 누가 플래시를 가졌으면 이 곳은 보이지 않는다.
+      id: 'cabinet',
+      text: '휴게실 구석의 서랍을 뒤져 본다',
+      tier: 1,
+      when: { not: { item: 'flash' } },
+      findings: [
+        {
+          text: '서랍 속에서 손바닥만 한 소형 플래시를 찾았다. 건전지는 아직 살아 있다. 방금까지 누군가 쥐고 있었던 것처럼 따뜻하다. 챙겼다.',
+          effects: [{ give: 'flash', to: 'actor' }],
+        },
+      ],
     },
     {
       id: 'slot',
@@ -322,13 +378,16 @@ const item: TaskDef = {
           effects: [learn(`no-item-${yesterdayOf(p)}`)],
         }),
       ),
-      {
-        id: 'drawer',
-        text: '혼자 휴게실 구석의 서랍을 뒤져 본다',
-        when: { not: { item: 'flash' } },
-        result: '서랍 속에서 손바닥만 한 소형 플래시를 찾았다. 건전지는 아직 살아 있다. 방금까지 누군가 쥐고 있었던 것처럼 따뜻하다.',
-        effects: [{ give: 'flash', to: 'actor' }],
-      },
+      // 밤에는 아이템을 얻을 수 없고, 가진 아이템을 쓰는 선택지만 있다. 플래시는 낮의 조사(구석의 서랍)에서 얻는다.
+      ...byPriceNight(
+        'lit-night',
+        '혼자 소형 플래시로 투입구 안쪽 홈을 비춰 본다',
+        (p) => `today-${p}`,
+        (p) => ({
+          result: `소형 플래시로 투입구 안쪽을 비추자 홈의 모양이 또렷하다. ${SHAPE[p]}이다. 손이 끼일 걱정은 없다.`,
+          effects: [learn(`today-${p}`)],
+        }),
+      ).map(withItem('flash')),
     ],
   },
   hazard: [{ hurt: 'actor' }],
@@ -387,6 +446,19 @@ const button: TaskDef = {
         text: `덮개 틈으로 파란 선의 끝을 따라가 보았다. ${buttonLabel(w.green)} 칸으로는 가지 않는다.`,
         effects: [learn(`blue-not-${w.green}`)],
       })),
+    },
+    {
+      // 아이템은 낮의 조사에서만 얻는다. 이미 누가 장갑을 가졌으면 이 곳은 보이지 않는다.
+      id: 'toolbox',
+      text: '정비 서랍을 뒤져 본다',
+      tier: 1,
+      when: { not: { item: 'glove' } },
+      findings: [
+        {
+          text: '정비 서랍 맨 아래에서 두꺼운 절연 장갑을 찾았다. 한 켤레뿐이다. 손가락 끝에 검게 그을린 자국이 있다. 챙겼다.',
+          effects: [{ give: 'glove', to: 'actor' }],
+        },
+      ],
     },
     {
       id: 'peek-glove',
@@ -454,13 +526,16 @@ const button: TaskDef = {
           later: sanityLater(1),
         }),
       ),
-      {
-        id: 'drawer',
-        text: '혼자 정비 서랍을 뒤져 본다',
-        when: { not: { item: 'glove' } },
-        result: '정비 서랍 맨 아래에서 두꺼운 절연 장갑을 찾았다. 한 켤레뿐이다. 손가락 끝에 검게 그을린 자국이 있다.',
-        effects: [{ give: 'glove', to: 'actor' }],
-      },
+      // 밤에는 아이템을 얻을 수 없고, 가진 아이템을 쓰는 선택지만 있다. 장갑은 낮의 조사(정비 서랍)에서 얻는다.
+      ...byWiringNight(
+        'glove-night',
+        '혼자 절연 장갑을 끼고 덮개를 열어 초록 선의 끝을 확인한다',
+        (w) => `green-at-${w.green}`,
+        (w) => ({
+          result: `절연 장갑을 끼고 덮개를 열었다. 초록 선의 끝이 ${buttonLabel(w.green)} 칸에 이어져 있다. 손끝이 저리지 않았다.`,
+          effects: [learn(`green-at-${w.green}`)],
+        }),
+      ).map(withItem('glove')),
     ],
   },
   hazard: [{ hurt: 'actor' }],
@@ -547,6 +622,19 @@ const change: TaskDef = {
       ],
     },
     {
+      // 아이템은 낮의 조사에서만 얻는다. 이미 누가 집게를 가졌으면 이 곳은 보이지 않는다.
+      id: 'toolbox',
+      text: '자판기 아래 공구함을 뒤져 본다',
+      tier: 1,
+      when: { not: { item: 'tongs' } },
+      findings: [
+        {
+          text: '자판기 아래 공구함에서 긴 집게를 찾았다. 끝이 반질반질 닳아 있다. 전임자들이 동전을 집던 것이다. 챙겼다.',
+          effects: [{ give: 'tongs', to: 'actor' }],
+        },
+      ],
+    },
+    {
       id: 'tongs',
       text: '집게로 반환구의 동전을 집어 올리고 장부를 지켜본다',
       tier: 1,
@@ -588,12 +676,13 @@ const change: TaskDef = {
         result: '반환구에 얼굴을 가까이 댔다. 쇠 냄새와 함께 따뜻한 기운이 올라온다. 동전이 아직 따뜻하다. 쥐면 놓기 어려울 것 같다.',
         effects: [learn('change-night-warm')],
       },
+      // 밤에는 아이템을 얻을 수 없고, 가진 아이템을 쓰는 선택지만 있다. 집게는 낮의 조사(아래의 공구함)에서 얻는다.
       {
-        id: 'drawer',
-        text: '혼자 자판기 아래 공구함을 뒤져 본다',
-        when: { not: { item: 'tongs' } },
-        result: '자판기 아래 공구함에서 긴 집게를 찾았다. 끝이 반질반질 닳아 있다. 전임자들이 동전을 집던 것이다.',
-        effects: [{ give: 'tongs', to: 'actor' }],
+        id: 'tongs-night',
+        text: '혼자 집게로 반환구의 동전을 집어 올리고 장부를 지켜본다',
+        when: { all: [{ item: 'tongs', by: 'actor' }, { not: { knows: 'change-moved' } }] },
+        result: '집게로 동전을 집어 올리자 장부의 값이 집게를 쥔 사람의 이름 아래로 옮겨 적혔다. 손은 다치지 않았다.',
+        effects: [learn('change-moved')],
       },
     ],
   },

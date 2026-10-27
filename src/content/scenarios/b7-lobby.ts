@@ -161,22 +161,22 @@ function liftChain(): ChainStep[] {
       options: [
         { id: 'press-back', text: '누른 층에 가지 못하고 B7로 되돌아온다', right: true },
         {
+          id: 'press-below',
+          text: '누른 층의 바로 아래에서 멈춘다',
+          right: false,
+          wrong: miss('“누른 층의 바로 아래에서 멈춘다.” 층 표시등을 지켜보았다.', '표시등은 어느 층에서도 멈추지 않았다. 숫자가 [[shake|제멋대로]] 흘렀다.'),
+        },
+        {
           id: 'press-up',
           text: '누른 층까지 올라간다',
           right: false,
-          wrong: miss('“누른 층까지 올라간다.” 층 버튼에 손을 뻗었다.', '층 표시등이 [[shake|거꾸로]] 내려가더니 B7에서 멈췄다. 올라가기는커녕 되돌아온 것이다.'),
+          wrong: miss('“누른 층까지 올라간다.” 층 버튼에 손을 뻗었다.', '버튼에 불이 들어오자 문 안쪽에서 낮은 진동이 일었다. 기대한 대로 되지 않았다.'),
         },
         {
-          id: 'press-stuck',
-          text: '문이 닫히고 안에 갇힌다',
+          id: 'press-mirror',
+          text: '누른 층에 닿지만 거울 속 일행이 한 명 늘어난다',
           right: false,
-          wrong: miss('“누르면 문이 닫혀 갇힌다.” 모두 문틈에서 한 발 물러섰다.', '문은 한 번도 닫히려 하지 않았다. 열린 채 일행을 기다릴 뿐이다. 엉뚱한 곳에서 겁을 먹었다.'),
-        },
-        {
-          id: 'press-none',
-          text: '아무 일도 일어나지 않는다',
-          right: false,
-          wrong: miss('“눌러도 아무 일 없다.” 층 버튼 하나를 눌러 보았다.', '표시등이 [[shake|거꾸로]] 내려갔다. 아무 일도 없을 리가 없다.'),
+          wrong: miss('“도착하지만 거울이 달라진다.” 거울에서 눈을 떼지 않고 버튼을 눌렀다.', '거울은 변하지 않았다. 대신 일행의 숨소리가 한 박자 늦게 들렸다.'),
         },
       ],
       ok: firstOf(
@@ -194,6 +194,12 @@ function liftChain(): ChainStep[] {
       options: [
         { id: 'mirror-skip', text: '거울은 보지 않는다 — 곁눈으로도 훑지 않는다', right: true },
         {
+          id: 'mirror-side',
+          text: '정면으로는 보지 않고 곁눈으로만 훑는다',
+          right: false,
+          wrong: miss('“곁눈으로만 보면 괜찮다.” 거울을 비스듬히 훑었다.', '비친 일행 사이에서 누군가 천천히 고개를 돌렸다. [[shake|눈이 마주쳤다.]]'),
+        },
+        {
           id: 'mirror-count',
           text: '거울로 일행의 수를 확인한다',
           right: false,
@@ -209,8 +215,8 @@ function liftChain(): ChainStep[] {
       ok: firstOf(
         [
           [knows('lift-sign'), '문틈의 표지가 근거였다. “거울은 보지 마세요.” 거울을 보면 안 되는 이유가 있는 것이다.'],
+          [knows('lift-no-mirror'), '거울로 일행을 세어 보았다가 [[shake|하나가 더]] 있음을 본 기록이 근거였다. 거울은 보지 않는 편이 낫다.'],
           [knows('lift-mirror-hint'), '곁눈으로 훑어본 일이 근거였다. 비친 일행이 한 명 더 많은 것 같았다. 오래 보고 싶지 않은 느낌이 그 증거다.'],
-          [knows('lift-no-mirror'), '거울로 일행을 세어 보았다가 [[shake|하나가 더]] 있음을 본 기록이 근거였다. 보지 않는 편이 낫다.'],
         ],
         '거울에 대한 기록은 없었다. 근거 없이 감이 닿았을 뿐이다. 그래도 거울 쪽에서는 시선을 느끼지 않으려 애쓰게 된다.',
       ),
@@ -223,13 +229,19 @@ function liftChain(): ChainStep[] {
           id: 'wait-split',
           text: '한 명이 먼저 눌러 보고, 나머지는 따라간다',
           right: false,
-          wrong: miss('“한 명이 먼저 누르고 나머지가 따라가자.” 한 사람이 버튼을 눌렀다.', '누른 사람만 로비로 되돌아왔고 나머지는 한 칸 올라가다 멈췄다. 일행이 갈라졌다.'),
+          wrong: miss('“한 명이 먼저 누르고 나머지가 따라가자.” 한 사람이 버튼을 눌렀다.', '일행이 갈라졌다. 누른 사람은 로비로 돌아왔고 나머지는 한 칸 올라가다 멈췄다.'),
         },
         {
           id: 'wait-rush',
           text: '문이 닫히기 전에 서둘러 모두 탄다',
           right: false,
-          wrong: miss('“서둘러 타자.” 모두 문 안으로 뛰어들었다.', '문은 열린 채 그대로였다. 서두를 일이 아니었다. 거친 숨소리가 거울 속에서 [[shake|두 배로]] 들렸다.'),
+          wrong: miss('“서둘러 타자.” 모두 문 안으로 뛰어들었다.', '문은 열린 채 그대로였다. 거친 숨소리가 거울 속에서 [[shake|두 배로]] 들렸다.'),
+        },
+        {
+          id: 'wait-count',
+          text: '일행의 수를 소리 내어 센다',
+          right: false,
+          wrong: miss('“인원을 소리 내어 세어 보자.” 한 명씩 숫자를 불렀다.', '숫자가 하나 더 불려 나왔다. 아무도 그 목소리를 낸 적이 없었다.'),
         },
       ],
       ok: firstOf(
@@ -293,19 +305,19 @@ function sofaChain(): ChainStep[] {
           id: 'notes-all',
           text: '세 장 모두 사실이다',
           right: false,
-          wrong: miss('“세 장 모두 믿을 수 있다.” 쪽지 셋의 말을 모두 받아들여 보았다.', '말들이 서로 맞지 않았다. 따뜻하다고 한 곳이 차갑다고 한 곳과 겹쳤다. 모두가 사실일 수는 없다.'),
+          wrong: miss('“세 장 모두 믿을 수 있다.” 쪽지 셋의 말을 모두 받아들여 보았다.', '말들이 서로 맞지 않았다. 모두가 사실일 수는 없다.'),
         },
         {
           id: 'notes-two',
-          text: '두 장이다',
+          text: '두 장이 사실이고 한 장이 거짓이다',
           right: false,
-          wrong: miss('“두 장이다.” 두 쪽지의 말을 겹쳐 보았다.', '어느 조합을 해 봐도 끝내 하나로 모이지 않았다. 쪽지는 [[whisper|그렇게 넉넉하지 않다.]]'),
+          wrong: miss('“거짓은 한 장뿐이다.” 가장 수상한 쪽지 한 장을 치웠다.', '남은 두 장의 말도 서로 맞지 않았다. 쪽지는 [[whisper|그렇게 넉넉하지 않다.]]'),
         },
         {
           id: 'notes-none',
           text: '믿을 만한 쪽지는 한 장도 없다',
           right: false,
-          wrong: miss('“믿을 쪽지는 없다.” 쪽지를 모두 접어 치우려 했다.', '접수대 위 안내판의 불빛이 한 번 깜빡였다. 사실을 적어 둔 한 장은 분명히 있다.'),
+          wrong: miss('“믿을 쪽지는 없다.” 쪽지를 모두 접어 치우려 했다.', '접수대 위 안내판의 불빛이 한 번 깜빡였다.'),
         },
       ],
       ok: firstOf(
@@ -329,10 +341,10 @@ function sofaChain(): ChainStep[] {
       ok: SOFAS.flatMap(([s]) =>
         firstOf(
           [
-            [anyOf(knows(`ink-${s}`), knows(`lens-${s}`)), `잉크가 근거였다. 세 쪽지 가운데 ${NOTE_POS[trueNotePos(s)]}의 잉크만 오래되어 갈색으로 바래 있었다.`],
+            [anyOf(knows(`ink-${s}`), knows(`lens-${s}`)), `잉크가 근거였다. 세 쪽지 가운데 “${NOTE_POS[trueNotePos(s)]}”의 잉크만 오래되어 갈색으로 바래 있었다.`],
             [
               allOf(...POS.map((pos) => knows(noteId(s, pos)))),
-              `세 쪽지를 나란히 놓고 따져 본 것이 근거였다. 사실이 한 장뿐이라는 규칙에 맞는 조합은 ${NOTE_POS[trueNotePos(s)]}가 사실일 때 하나뿐이었다.`,
+              `세 쪽지를 나란히 놓고 따져 본 것이 근거였다. 사실이 한 장뿐이라는 규칙에 맞는 조합은 “${NOTE_POS[trueNotePos(s)]}”가 사실일 때 하나뿐이었다.`,
             ],
           ],
           '어느 쪽지가 사실인지 가려 줄 단서는 아직 없었다. 근거 없이 감이 닿았을 뿐이다.',
@@ -413,6 +425,12 @@ function stairsChain(): ChainStep[] {
           text: '센 숫자보다 하나 많이 내려가야 한다',
           right: false,
           wrong: miss('“하나 더 내려가야 한다.” 기둥 수보다 한 칸 더 내려갔다.', '끝은 이미 지나쳐 있었다. 발끝이 닿은 곳은 로비와 똑같은 로비였고, 소파가 [[shake|하나 더]] 있었다.'),
+        },
+        {
+          id: 'rel-half',
+          text: '센 숫자의 절반만 내려가면 된다',
+          right: false,
+          wrong: miss('“절반이면 된다.” 반쯤 내려가다 멈춰 섰다.', '계단은 아직 한참 남아 있었다. 올라오는 길에 아래의 숫자 소리가 바싹 따라붙었다.'),
         },
       ],
       ok: firstOf(
@@ -509,6 +527,42 @@ const lift: TaskDef = {
       ],
     },
     {
+      // 낙서와 같은 단서에 이르는 다른 길 (대가는 없다). 둘이 나눠 맡으면 같은 것을 두 번 얻는 셈이 된다.
+      id: 'buttons',
+      text: '층 버튼에 배어 있는 손때를 살핀다',
+      tier: 1,
+      findings: [
+        {
+          text: '층 버튼마다 손때가 깊게 배어 있다. 누르고 또 눌러서 닳은 흔적인데, 닳은 정도가 모두 비슷하다. 어느 층을 눌렀든 결국 같은 곳으로 돌아왔다는 듯이.\n버튼 곁에 누군가 손톱으로 새겨 둔 글씨가 있다. “누르면 돌아온다.”',
+          effects: [learn('lift-panel-press')],
+        },
+      ],
+    },
+    {
+      // 알아낼 것이 없는 곳: 한 라운드에 한 곳만 살필 수 있으므로 여기를 고르면 그만큼 놓친다.
+      id: 'ceiling',
+      text: '문 위의 층 표시등과 천장 등을 올려다본다',
+      tier: 1,
+      findings: [
+        {
+          text: '층 표시등은 B6에서 멈춰 있고, 천장 등은 일정한 박자로 깜빡인다. 박자가 숨소리를 닮았다. 한참을 올려다보았지만 알아낼 만한 것은 없었다.',
+        },
+      ],
+    },
+    {
+      // 아이템은 낮의 조사에서만 얻는다. 이미 누가 열쇠를 가졌으면 이 곳은 보이지 않는다.
+      id: 'keyring',
+      text: '접수대 뒤 벽에 걸린 열쇠 꾸러미를 살핀다',
+      tier: 1,
+      when: { not: { item: 'key' } },
+      findings: [
+        {
+          text: '벽에 열쇠 꾸러미가 걸려 있다. 대부분 녹슬어 맞는 곳이 없어 보이는데, 하나에만 “점검용”이라고 적힌 꼬리표가 달려 있다. 끝이 닳았다. 챙겼다.',
+          effects: [{ give: 'key', to: 'actor' }],
+        },
+      ],
+    },
+    {
       id: 'press',
       text: '층 버튼 하나를 눌러 본다 (문은 열어 둔 채)',
       tier: 2,
@@ -590,12 +644,13 @@ const lift: TaskDef = {
         later: sanityLater(1),
       },
       {
-        id: 'drawer',
-        text: '혼자 접수대 서랍을 조심스럽게 뒤져 본다',
-        when: { not: { item: 'key' } },
+        // 밤에는 아이템을 얻을 수 없고, 가진 아이템을 쓰는 선택지만 있다. 열쇠는 낮의 조사(열쇠 꾸러미)에서 얻는다.
+        id: 'panel-night',
+        text: '혼자 점검 열쇠로 패널 뚜껑을 열고 안쪽 배선을 살핀다',
+        when: { all: [{ item: 'key', by: 'actor' }, { not: { knows: 'lift-wiring' } }] },
         result:
-          '서랍 안쪽으로 손을 넣어 종이 클립과 닳은 연필 사이를 더듬었다. 작고 차가운 것이 손끝에 걸렸다. 열쇠였다. “점검용”이라고 적힌 꼬리표가 달려 있다.',
-        effects: [{ give: 'key', to: 'actor' }],
+          '밤의 로비는 조용했다. 열쇠로 패널 뚜껑을 열고 안쪽을 더듬어 살폈다. 층 버튼의 선들이 모두 한 단자로 묶여 있다. 어느 버튼을 눌러도 같은 곳으로 돌아오게 되어 있다.',
+        effects: [learn('lift-wiring')],
       },
     ],
   },
@@ -658,6 +713,30 @@ const sofa: TaskDef = {
         {
           text: '접수대 위에 작은 안내판이 서 있다. “쪽지는 세 장 남겨 두었습니다. 사실이 적힌 쪽지는 그중 한 장뿐이며, 그 쪽지는 오래전에 쓰인 것입니다.”',
           effects: [learn('sofa-rule')],
+        },
+      ],
+    },
+    {
+      // 알아낼 것이 없는 곳: 한 라운드에 한 곳만 살필 수 있으므로 여기를 고르면 그만큼 놓친다.
+      id: 'frame',
+      text: '벽에 걸린 낡은 액자를 들여다본다',
+      tier: 1,
+      findings: [
+        {
+          text: '액자 속 사진에는 이 로비가 찍혀 있다. 소파는 세 개, 사람은 보이지 않는다. 오래 보고 있으니 사진 속 소파 하나가 방금 움직인 것 같았다. 착각이다. 알아낼 만한 것은 없었다.',
+        },
+      ],
+    },
+    {
+      // 아이템은 낮의 조사에서만 얻는다. 이미 누가 돋보기를 가졌으면 이 곳은 보이지 않는다.
+      id: 'shelf',
+      text: '접수대 곁 선반의 상자를 열어 본다',
+      tier: 1,
+      when: { not: { item: 'loupe' } },
+      findings: [
+        {
+          text: '선반 구석의 먼지 없는 상자 안에 손바닥만 한 돋보기가 놓여 있었다. 렌즈에는 지문 하나 묻어 있지 않다. 챙겼다.',
+          effects: [{ give: 'loupe', to: 'actor' }],
         },
       ],
     },
@@ -735,13 +814,17 @@ const sofa: TaskDef = {
           '쓰레기통 바닥에서 구겨진 쪽지를 꺼내 펴 보았다. 글씨가 희미하다. “사실은 가장 먼저 쓴 한 장이다. 나중에 쓴 쪽지는 믿지 마라.”',
         effects: [learn('sofa-night-first')],
       },
-      {
-        id: 'shelf',
-        text: '혼자 접수대 곁의 선반을 뒤져 본다',
-        when: { not: { item: 'loupe' } },
-        result: '선반 구석의 먼지 없는 상자 안에 손바닥만 한 돋보기가 놓여 있었다. 렌즈에는 지문 하나 묻어 있지 않다.',
-        effects: [{ give: 'loupe', to: 'actor' }],
-      },
+      // 밤에는 아이템을 얻을 수 없고, 가진 아이템을 쓰는 선택지만 있다. 돋보기는 낮의 조사(선반의 상자)에서 얻는다.
+      ...SOFAS.map(([s]) => {
+        const real = SOFA_NOTES[s].find((n) => n.holds(s))!
+        return {
+          id: `lens-night-${s}`,
+          text: '혼자 돋보기로 쪽지들의 잉크를 들여다본다',
+          when: allOf(seatIs(s), { item: 'loupe', by: 'actor' }, not(knows(`lens-${s}`))),
+          result: `밤의 로비에서 돋보기로 쪽지들의 잉크를 들여다보았다. 가장 오래된 잉크로 쓰인 글은 “${real.text}”이다. (${NOTE_POS[real.pos]})`,
+          effects: [learn(`lens-${s}`)],
+        }
+      }),
     ],
   },
   hazard: [{ hurt: 'actor' }],
@@ -814,6 +897,30 @@ const stairs: TaskDef = {
       ],
     },
     {
+      // 알아낼 것이 없는 곳: 한 라운드에 한 곳만 살필 수 있으므로 여기를 고르면 그만큼 놓친다.
+      id: 'handrail',
+      text: '난간의 칠이 벗겨진 자리를 살핀다',
+      tier: 1,
+      findings: [
+        {
+          text: '난간은 같은 자리마다 칠이 벗겨져 검게 닳아 있다. 수없이 많은 손이 잡고 내려간 흔적이다. 올라온 손자국은 거의 없다. 기둥 수나 칸 수에 대해서는 알려 주는 것이 없다.',
+        },
+      ],
+    },
+    {
+      // 아이템은 낮의 조사에서만 얻는다. 이미 누가 손전등을 가졌으면 이 곳은 보이지 않는다.
+      id: 'rack',
+      text: '계단 입구 벽의 쇠고리를 살핀다',
+      tier: 1,
+      when: { not: { item: 'torch' } },
+      findings: [
+        {
+          text: '벽의 쇠고리에 청동 손전등이 걸려 있다. 만져 보니 아직 따뜻하다. 방금까지 누군가 쥐고 있었던 것처럼. 챙겼다.',
+          effects: [{ give: 'torch', to: 'actor' }],
+        },
+      ],
+    },
+    {
       id: 'both',
       text: '두 사람이 난간 양쪽에서 동시에 센다',
       tier: 2,
@@ -872,13 +979,14 @@ const stairs: TaskDef = {
         effects: [learn('stairs-night-skip')],
         later: sanityLater(2),
       },
-      {
-        id: 'desk',
-        text: '혼자 접수대 안쪽 서랍을 뒤져 본다',
-        when: { not: { item: 'torch' } },
-        result: '접수대 안쪽으로 손을 넣어 서랍을 열었다. 서랍 맨 안쪽에서 청동 손전등을 찾았다. 아직 따뜻하다. 방금까지 누군가 쥐고 있었던 것처럼.',
-        effects: [{ give: 'torch', to: 'actor' }],
-      },
+      // 밤에는 아이템을 얻을 수 없고, 가진 아이템을 쓰는 선택지만 있다. 손전등은 낮의 조사(쇠고리)에서 얻는다.
+      ...STAIRS.map((n) => ({
+        id: `torch-night-${n}`,
+        text: '혼자 손전등으로 비추며 난간 기둥을 하나씩 센다',
+        when: allOf(stairsIs(n), { item: 'torch', by: 'actor' }, not(knows(`torch-${n}`))),
+        result: `밤의 계단에서 청동 손전등으로 비추며 난간 기둥을 하나씩 세었다. 모두 ${n}개다. 틀림없다.`,
+        effects: [learn(`torch-${n}`)],
+      })),
     ],
   },
   hazard: [{ hurt: 'actor' }],

@@ -307,7 +307,9 @@ for (const n of [1, 2]) {
   assert.throws(() => buildTasks({ tasks: [{ ...def, chain: [{ ...def.chain![0], ok: undefined }, ...def.chain!.slice(1)] }], after: 'x' }), /근거를 보이는 이야기\(ok\)/)
   const rpt = validateScenario(tasksChain)
   assert.deepEqual(rpt.errors, [], rpt.errors.join('\n'))
-  assert.deepEqual(rpt.warnings, [], rpt.warnings.join('\n'))
+  // 과제가 하나뿐인 시험용 시나리오라 풀이 순서의 후보가 하나인 경고만 허용한다
+  const others = rpt.warnings.filter((w) => !w.includes('후보가 2개 이상'))
+  assert.deepEqual(others, [], others.join('\n'))
 
   const cs = (a: ScenarioGame, x: ScenarioAction) => reduceScenario(tasksChain, a, x)
   const cids = (g: ScenarioGame) => g.run.players.map((p) => p.id)
@@ -329,7 +331,7 @@ for (const n of [1, 2]) {
   // 끝까지 맞으면 풀린다 (번호가 2번인 판: 크지 않다 → 2번이다 → 2번)
   let g = cvote(think, 'lock-reason')
   assert.equal(g.run.nodeId, 'lock-c1')
-  assert.deepEqual(cview(g).scene!.choices.map((c) => c.id), ['big', 'small'])
+  assert.deepEqual(cview(g).scene!.choices.map((c) => c.id).sort(), ['big', 'small'], '보기 순서는 판마다 섞이므로 목록만 본다')
   g = cready(cvote(g, 'small'))
   assert.equal(g.run.nodeId, 'lock-c2')
   g = cready(cvote(g, 'two'))
@@ -376,4 +378,28 @@ for (const n of [1, 2]) {
     assert.ok(r.endings.find((e) => e.id === 'win')!.reachableCombos > 0, '추리 사슬로 풀어 엔딩에 닿는다')
   }
   console.log(`통과: 추리 사슬 (빌더 검증·단계 투표·틀리면 그 시도 종료·전수 탐색 상태 ${r.states}개)`)
+}
+
+/// 13) 보기 순서 섞기: 판마다 다르지만 같은 판에서는 모두에게 같고 다시 그려도 그대로다. 추리를 시작할지 정하는 장면은 섞이지 않는다.
+{
+  const ts = (a: ScenarioGame, x: ScenarioAction) => reduceScenario(tasksChain, a, x)
+  const tids = (g: ScenarioGame) => g.run.players.map((p) => p.id)
+  const tready = (g: ScenarioGame) => tids(g).reduce((s, id) => ts(s, { type: 'ready', playerId: id }), g)
+  const tvote = (g: ScenarioGame, choiceId: string) => tids(g).reduce((s, id) => ts(s, { type: 'vote', playerId: id, choiceId }), g)
+  const toThink = (seed: number) => {
+    const g = tready(tready(createScenarioGame(tasksChain, { seed, players: partyOf(2), vars: { order: 'lock', lock: '2' } })))
+    return tids(g).reduce((s, id) => ts(s, { type: 'pick', playerId: id, actionId: 'lock-wait' }), g)
+  }
+  const firsts = new Set<string>()
+  for (let seed = 1; seed <= 40; seed++) {
+    const g = tvote(toThink(seed), 'lock-reason')
+    const order1 = viewForScenario(tasksChain, g, 'p1').scene!.choices.map((c) => c.id)
+    const order2 = viewForScenario(tasksChain, g, 'p2').scene!.choices.map((c) => c.id)
+    assert.deepEqual(order1, order2, '모두에게 같은 순서로 보인다')
+    assert.deepEqual(viewForScenario(tasksChain, g, 'p1').scene!.choices.map((c) => c.id), order1, '다시 그려도 그대로다')
+    firsts.add(order1[0])
+  }
+  assert.equal(firsts.size, 2, '맨 위에 오는 보기가 판마다 달라진다')
+  assert.deepEqual(viewForScenario(tasksChain, toThink(9), 'p1').scene!.choices.map((c) => c.id), ['lock-reason', 'lock-pass'], '추리를 시작할지 정하는 장면은 섞이지 않는다')
+  console.log('통과: 보기 순서 섞기 (판마다 다르고, 모두에게 같고, 시작 여부 장면은 그대로)')
 }

@@ -58,7 +58,7 @@ export interface TaskAnswer {
 export interface ChainStep {
   /** 이 단계에서 풀어야 할 질문. 알아낸 단서에 따라 조각을 덧붙일 수 있다 (예: 이미 밝혀진 오답 알림) */
   question: Text
-  /** 이 단계의 보기. 맞는 것이 판마다 달라도 된다(`right`가 조건). 틀린 보기는 `wrong`(이야기)이 있어야 한다. */
+  /** 이 단계의 보기. 맞는 것이 판마다 달라도 된다(`right`가 조건). 틀린 보기는 `wrong`(이야기)이 있어야 한다. 순서는 판마다 섞인다. */
   options: TaskAnswer[]
   /**
    * 맞게 골랐을 때의 이야기: 어떤 단서가 근거였는지 보여 준다. 단서를 아는지(`knows`)에 따라 조각을 나누어,
@@ -288,6 +288,9 @@ export function buildTasks(spec: TasksSpec): TasksBuilt {
       id: probe,
       kind: 'split',
       title: `${task.title} · 조사`,
+      // 조사는 각자 자기 몫을 살피는 장면이라 "모두의 조합이 결과를 정한다"는 설명이 맞지 않는다
+      label: '조사',
+      hint: '각자 다른 곳을 하나씩 살핀다 (한 곳은 한 명만)',
       text: task.probeText ?? '어디를 살필지 정한다. 한 번에 한 곳씩만 살필 수 있고, 살핀 곳은 다시 살필 수 없다.',
       actions: [
         ...task.probes.map((p) => {
@@ -356,6 +359,7 @@ export function buildTasks(spec: TasksSpec): TasksBuilt {
           kind: 'vote',
           title: `${task.title} · 추리 ${i}/${last}`,
           text: step.question,
+          shuffle: true, // 맞는 보기가 늘 같은 자리에 있지 않게 판마다 순서를 섞는다
           choices: step.options.map((o) => {
             const miss: { when?: Cond; to: string }[] = [
               { when: { not: flag(passFlag(t, 1)) }, to: `${t}-c${i}-wrong-${o.id}-1` },
@@ -394,7 +398,8 @@ export function buildTasks(spec: TasksSpec): TasksBuilt {
       kind: 'story',
       title: `${task.title} · 풀렸다`,
       tone: 'success',
-      text: lastOk ? [...pieces(lastOk), { text: '\n' }, ...pieces(task.solved)] : task.solved,
+      // 근거와 풀이 사이의 줄바꿈은 풀이 조각의 앞에 붙인다 (줄바꿈만 있는 조각은 검증기가 "빈 문장"으로 본다)
+      text: lastOk ? [...pieces(lastOk), ...pieces(task.solved).map((p) => ({ ...p, text: `\n${p.text}` }))] : task.solved,
       // 풀린 과제의 조사·오답·패스 깃발은 더 읽히지 않으므로 지운다 (남겨 두면 전수 탐색의 상태 수가 과제마다 곱해진다)
       onEnter: [
         { flag: solvedFlag(t) },
