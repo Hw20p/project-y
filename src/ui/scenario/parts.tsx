@@ -112,7 +112,7 @@ export function NewFacts({ changes, view }: { changes: Change[]; view: ScenarioV
   return (
     <>
       {[...found].map(([id, who]) => {
-        const text = view.clues.find((c) => c.id === id)?.text ?? view.notebook.find((f) => f.id === id)?.text ?? id
+        const text = view.clues.find((c) => c.id === id)?.text ?? id
         const mine = who.includes(view.me.id)
         return (
           <p
@@ -277,8 +277,7 @@ export function ScenarioParty({
                 <span className="w-4 text-right text-[10px] text-fog">{p.stats.sanity}</span>
               </div>
               <p className="mt-1 text-[11px] text-ash">
-                체력 <span className="text-fog">{p.stats.body}</span> · 관찰 <span className="text-fog">{p.stats.insight}</span> · 행운{' '}
-                <span className="text-fog">{p.stats.luck}</span>
+                체력 <span className="text-fog">{p.stats.body}</span> · 관찰 <span className="text-fog">{p.stats.insight}</span>
               </p>
             </li>
           )

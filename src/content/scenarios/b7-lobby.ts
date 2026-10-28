@@ -997,6 +997,12 @@ const sofa: TaskDef = {
   },
 }
 
+/** 파티 누군가 `<접두>-<기둥 수>` 단서를 이미 알아냈는지 */
+const knowsAnyStairs = (prefix: string): Cond => anyOf(...STAIRS.map((n) => knows(`${prefix}-${n}`)))
+/** 스텟 기준선: 필수 길이 아니라 같은 단서를 더 일찍(밤을 덜 겪고) 얻는 지름길이다. 3은 전문가는 처음부터, 균형형은 밤 훈련 한 번이면 닿는 선이다. */
+const bodyGate = { cond: { stat: 'body', min: 3, by: 'actor' } as Cond, locked: '체력 3 이상이 필요하다. 튼튼한 다리로 흔들림 없이 내려가야 한다.' }
+const insightGate = { cond: { stat: 'insight', min: 3, by: 'actor' } as Cond, locked: '관찰 3 이상이 필요하다. 어둠 속에서도 기둥을 놓치지 않아야 한다.' }
+
 const stairs: TaskDef = {
   id: 'stairs',
   title: '계단',
@@ -1137,11 +1143,37 @@ const stairs: TaskDef = {
       ],
     },
     {
+      // 체력 지름길: 2단계 '직접 내려가 세기'와 같은 단서를 첫날에, 파고들기·정신력 대가 없이 얻는다. `risk`가 없어서 위험한 곳으로 뽑히지 않는다.
+      id: 'stride',
+      text: '난간을 잡고 성큼성큼 내려가며 칸을 센다',
+      tier: 1,
+      needsHealthy: true,
+      gate: bodyGate,
+      when: not(knowsAnyStairs('walk')),
+      findings: byStairs((n) => ({
+        text: `숫자 소리에 맞추지 않고 내 걸음으로 칸을 세며 내려갔다. 다리가 흔들리지 않았다. ${STAIR_STEPS[n]} 칸에서 계단이 끝났다. 끝에는 로비와 똑같은 로비가 있었다. 서둘러 되짚어 올라왔다.`,
+        effects: [learn(`walk-${n}`)],
+      })),
+    },
+    {
+      // 관찰 지름길: 2단계 '양쪽에서 세기'와 같은 단서를 혼자서, 첫날에 얻는다.
+      id: 'keen',
+      text: '기둥의 이음매와 간격을 눈여겨보며 한 번에 센다',
+      tier: 1,
+      gate: insightGate,
+      when: not(anyOf(knowsAnyStairs('exact'), knowsAnyStairs('torch'))),
+      findings: byStairs((n) => ({
+        text: `기둥의 이음매와 간격을 하나하나 눈에 새기며 세었다. 같은 기둥을 두 번 세지 않았다. 기둥은 모두 ${n}개다. 틀림없다.`,
+        effects: [learn(`exact-${n}`)],
+      })),
+    },
+    {
       id: 'both',
       text: '두 사람이 난간 양쪽에서 동시에 센다',
       tier: 2,
       min: 2,
       needsHealthy: true,
+      when: not(knowsAnyStairs('exact')),
       risk: '둘이 동시에 난간에 체중을 싣자 난간 한쪽이 삐걱, 하고 흔들렸다. 휘청하며 계단 모서리에 정강이를 세게 부딪쳤다. 아래의 숫자 세는 소리가 그 순간 한 박자 멈췄다.',
       findings: byStairs((n) => ({
         text: `두 사람이 난간 양쪽에서 동시에 세어 합쳤다. 기둥은 모두 ${n}개다. 틀림없다.`,
@@ -1153,6 +1185,7 @@ const stairs: TaskDef = {
       text: '직접 몇 칸 내려가며 세어 본다',
       tier: 2,
       needsHealthy: true,
+      when: not(knowsAnyStairs('walk')),
       risk: '되짚어 올라오는 길에 발밑의 한 칸이 사라진 것처럼 푹 꺼졌다. 난간을 잡았지만 발목이 크게 꺾였다. 올라와서 보니 그 칸은 원래 자리에 멀쩡히 있었다.',
       findings: [{ text: '난간을 잡고 계단을 내려가 보기로 했다. 아래에서 숫자 세는 소리가 점점 가까워진다.' }],
       dig: digTwoStep('walk', {
@@ -1736,7 +1769,7 @@ export const b7Lobby: Scenario = {
     { id: 'torch', name: '청동 손전등', text: '빛이 닿는 곳은 계단이 계단처럼 보인다.' },
   ],
   facts: [
-    // 어느 판에서나 같은 사실 (단서 노트에 남는다)
+    // 어느 판에서나 같은 사실
     { id: 'light-cycle', text: '조명은 7분마다 한 단계씩 어두워진다. 마지막 단계는 암전이다.' },
     { id: 'book-date', text: '방명록의 모든 서명은 날짜가 같다.' },
     { id: 'lift-panel-press', text: '엘리베이터 패널 아래 낙서: “누르면 돌아온다.”' },
@@ -1760,7 +1793,7 @@ export const b7Lobby: Scenario = {
     { id: 'phone-count', text: '전화는 인원수를 묻고, 대답을 방명록에 적는다.' },
     { id: 'extra-voice', text: '인원을 소리 내어 세면 어디선가 한 명이 더 대답한다.' },
     { id: 'extra-returns', text: '발소리는 소파에서 시작해 소파로 돌아간다.' },
-    // 판마다 바뀌는 값에 대한 사실 (조사 보드에만 붙고 단서 노트에는 남지 않는다)
+    // 판마다 바뀌는 값에 대한 사실 (조사 보드에 붙는다)
     ...SOFAS.flatMap(([s]) =>
       (Object.keys(NOTE_POS) as NotePos[]).map((pos) => ({
         id: noteId(s, pos),
@@ -1788,7 +1821,7 @@ export const b7Lobby: Scenario = {
     { id: 'echo-low', text: '난간을 튕겨 센 울림으로는 기둥이 열두 개를 넘지 않는다.', run: true },
     { id: 'echo-high', text: '난간을 튕겨 센 울림으로는 기둥이 열두 개를 넘는다.', run: true },
     ...STAIRS.flatMap((n) => [
-      { id: `exact-${n}`, text: `난간 기둥은 ${n}개다. (양쪽에서 세어 정확하다)`, run: true },
+      { id: `exact-${n}`, text: `난간 기둥은 ${n}개다. (정확히 세었다)`, run: true },
       { id: `walk-${n}`, text: `${STAIR_STEPS[n]} 칸을 내려가자 계단이 끝났다. (직접 내려가 세었다)`, run: true },
       { id: `wall-${n}`, text: `계단 벽의 눈금에는 “${STAIR_STEPS[n]}”이라고 적혀 있다.`, run: true },
       { id: `torch-${n}`, text: `손전등으로 비춰 세니 난간 기둥은 ${n}개다. (정확하다)`, run: true },

@@ -9,11 +9,11 @@ export interface ItemDef {
   text: string
 }
 
-/** 사실(단서): 알아낸 사람만 아는 것. 단서 노트에 남는다. */
+/** 사실(단서): 알아낸 사람이 있으면 파티 전원에게 이름과 함께 보인다. 판이 끝나면 사라진다. */
 export interface HintDef {
   id: string
   text: string
-  /** 이번 판에서만 뜻이 있는 사실 (판마다 바뀌는 값을 가리킨다). 조사 보드에는 붙지만 단서 노트에는 보이지 않는다. */
+  /** 이번 판에서만 뜻이 있는 사실 (판마다 바뀌는 값을 가리킨다). 조사 보드에 붙는다. */
   run?: boolean
 }
 
@@ -41,7 +41,7 @@ export interface BoardDef {
 }
 
 /**
- * 대상 자료의 한 항목. `unlock.hint`가 있으면 그 사실을 단서 노트에 가진 사람의 화면에서만 열린다 (말로 전해야 다른 사람이 읽는다).
+ * 대상 자료의 한 항목. `unlock.hint`가 있으면 이번 판에서 파티 누구라도 그 사실을 알아냈을 때 열린다.
  * 없으면 처음부터 열려 있다.
  */
 export interface DossierEntry {
@@ -169,6 +169,11 @@ export interface SplitAction {
   text: Text
   when?: Cond
   locked?: string
+  /**
+   * 스텟 기준선 같은 "자격" 조건. `when`이 맞는데 이 조건이 안 맞는 사람에게는 선택지가 숨지 않고 `locked` 문구와 함께 잠긴 채 보인다
+   * (`when`이 안 맞으면 숨는다). 그래서 "체력 3 필요"처럼 스텟이 왜 중요한지 보여 줄 수 있다.
+   */
+  gate?: { cond: Cond; locked: string }
   /** 이 행동을 고를 수 있는 최대 인원 (1이면 한 사람만). 먼저 고른 사람이 차지한다. */
   max?: number
   /**
@@ -222,6 +227,11 @@ export interface SplitNode extends NodeBase {
   /** 행동을 고른 사람에게만 보이는 발견 (사람마다 다른 정보) */
   private?: PrivateFinding[]
   outcomes: SplitOutcome[]
+  /**
+   * true면 이어지는 곳이 개인 장면일 때 결과 화면을 먼저 보이지 않는다. 효과는 지금 적용되고, 결과는 그 개인 장면이 끝난 뒤
+   * 개인 장면의 결과와 합쳐서 한 번만 보인다 (조사 뒤의 파고들기). 이어지는 곳이 개인 장면이 아니면 평소처럼 결과를 보인다.
+   */
+  holdResult?: boolean
 }
 
 /** 혼자 하는 장면의 선택지 */
@@ -331,10 +341,10 @@ export interface Scenario {
   summary: string
   observation: string[]
   manual: string[]
-  /** 대상 자료. 잠금은 `unlock.hint`(단서 id)만 쓴다: 단서 노트에 그 단서가 있는 사람에게 열린다. */
+  /** 대상 자료. 잠금은 `unlock.hint`(단서 id)만 쓴다: 이번 판에서 파티 누구라도 그 단서를 알아내면 열린다. */
   dossier?: DossierEntry[]
   items: ItemDef[]
-  /** 알아낼 수 있는 사실들. 한 번 알아내면 단서 노트에 남는다. */
+  /** 알아낼 수 있는 사실들. 알아낸 사람의 이름과 함께 파티 전원에게 보인다. */
   facts: HintDef[]
   /** 조사 보드: 목표와 풀어야 할 의문들 */
   board?: BoardDef

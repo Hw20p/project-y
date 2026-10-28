@@ -401,9 +401,10 @@ function trade(g: ScenarioGame, put: string, press: string, change: string): Sce
   for (const node of ['arrive', 'first-look', 'item-intro']) g = node === 'first-look' ? settle(pickEach(g, {}, 'pocket')) : ready(g)
   g = pickEach(g, { 0: 'receipt', 1: 'graffiti' }, 'item-wait')
   assert.deepEqual(g.run.players.map((p) => p.hurt), [true, false])
+  // 영수증·낙서는 단계형 조사라, 이야기와 단서는 파고들기를 맞게 마친 뒤 조사 결과에 한 번에 나온다
+  g = soloAs(soloAs(soloAs(soloAs(g, 'p1', 'receipt-1-good'), 'p1', 'receipt-2-good'), 'p2', 'graffiti-1-date'), 'p2', 'graffiti-2a-order')
   assert.match(view(g, 'p1').result!.mine!.text, /글자가 잉크처럼 번져/)
-  // 영수증·낙서는 단계형 조사라, 단서는 파고들기를 맞게 마친 뒤에 나온다
-  g = settle(soloAs(soloAs(soloAs(soloAs(settle(g), 'p1', 'receipt-1-good'), 'p1', 'receipt-2-good'), 'p2', 'graffiti-1-date'), 'p2', 'graffiti-2a-order'))
+  g = settle(g)
   assert.ok(g.run.players[0].facts.includes('yday-coin'), '다쳐도 어제 거래는 알아낸다')
 
   // 거스름돈: 위험한 곳은 정신력 −3 (낙서를 읽은 사람만)
@@ -517,8 +518,9 @@ function trade(g: ScenarioGame, put: string, press: string, change: string): Sce
     return pickEach(g, picks, 'item-wait')
   }
   const g0 = toProbe({ 0: 'display', 1: 'trash' })
-  assert.match(view(g0, 'p1').result!.mine!.text, /의미를 읽어 낼 수 없었다/)
-  const g = settle(soloAs(soloAs(settle(g0), 'p2', 'trash-1-good'), 'p2', 'trash-2-good')) // 휴지통 종이는 단계형 조사다
+  const g1 = soloAs(soloAs(g0, 'p2', 'trash-1-good'), 'p2', 'trash-2-good') // 휴지통 종이는 단계형 조사다
+  assert.match(view(g1, 'p1').result!.mine!.text, /의미를 읽어 낼 수 없었다/)
+  const g = settle(g1)
   assert.ok(!g.run.players[0].facts.some((f) => f.startsWith('yday-')), '표시등에서는 단서가 나오지 않는다')
   assert.ok(g.run.players[1].facts.includes('yday-coin'), '휴지통의 종이에서도 어제의 거래가 나온다')
   console.log('통과: 자판기 조사 — 알아낼 것이 없는 곳과 같은 단서에 이르는 다른 길')

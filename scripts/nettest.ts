@@ -262,18 +262,17 @@ try {
   assert.ok(a.view.endings.reached.some((e) => e.id === ending.id))
   console.log(`통과: 엔딩까지 진행 (${ending.title})`)
 
-  // 8) 다시 도전: 방장만, 단서 노트와 닿은 엔딩은 남는다
-  const notebookBefore = a.view.notebook.length
+  // 8) 다시 도전: 방장만, 닿은 엔딩 기록만 남고 단서는 처음으로
   b2.send({ t: 'retry' })
   await until('방장 아님', () => b2.errors.length > 0)
   assert.equal(a.state!.view.phase, 'ended')
   a.send({ t: 'retry' })
   await until('새 판', () => a.state?.view.runNo === 2 && b2.state?.view.runNo === 2)
   assert.equal(a.view.phase, 'story')
-  assert.equal(a.view.notebook.length, notebookBefore, '단서 노트는 남는다')
+  assert.deepEqual(a.view.clues, [], '이번 판의 단서는 비워진다')
   assert.ok(a.view.endings.reached.length >= 1, '닿은 엔딩 기록이 남는다')
   assert.equal(a.view.me.stats.insight, 4, '입사 배경은 유지된다')
-  console.log('통과: 다시 도전(방장만·노트 유지)')
+  console.log('통과: 다시 도전(방장만·엔딩 기록만 유지)')
 
   // 9) 엔딩 전에는 대기실로 돌아갈 수 없다
   a.send({ t: 'rematch' })

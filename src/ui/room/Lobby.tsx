@@ -109,7 +109,7 @@ export function Lobby({
                   >
                     <span className="block text-sm">{a.name}</span>
                     <span className="mt-0.5 block text-xs text-ash">
-                      {(['body', 'insight', 'luck'] as const).map((k) => `${STAT_LABEL[k]} ${a.stats[k]}`).join(' · ')}
+                      {(['body', 'insight'] as const).map((k) => `${STAT_LABEL[k]} ${a.stats[k]}`).join(' · ')}
                     </span>
                     <span className="mt-1 block font-serif-kr text-xs leading-5 text-fog">{a.summary}</span>
                   </button>

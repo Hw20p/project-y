@@ -35,6 +35,14 @@ jobs:
       - name: Validate scenarios
         run: npm run validate
 
+      # 시나리오 엔진·과제 빌더·B7·자판기의 의도한 풀이 시험
+      - name: Scenario tests
+        run: npm run scenario
+
+      # 화면 렌더링 스모크 (브라우저 없이)
+      - name: UI smoke test
+        run: npm run uitest
+
       # 실제 WebSocket으로 방 만들기부터 엔딩까지 돌려 본다 (몇 초)
       - name: Server integration test
         run: npm run nettest

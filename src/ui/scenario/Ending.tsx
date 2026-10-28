@@ -74,7 +74,6 @@ export function ScenarioEnding({
             </li>
           ))}
         </ul>
-        <p className="mt-3 text-xs text-ash">알아낸 단서 {view.notebook.length}개는 다음 판에서도 단서 노트에 남는다.</p>
       </Appear>
 
       {seq.done && (

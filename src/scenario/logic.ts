@@ -125,8 +125,6 @@ export function applyEffects(game: ScenarioGame, effects: Effect[] | undefined, 
       }
     } else if ('learn' in e) {
       for (const p of targets(game, e.to, ctx)) {
-        const book = (game.notebooks[p.id] ??= [])
-        if (!book.includes(e.learn)) book.push(e.learn)
         if (!p.facts.includes(e.learn)) {
           p.facts.push(e.learn)
           changes.push({ kind: 'fact', playerId: p.id, id: e.learn })

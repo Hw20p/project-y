@@ -1,4 +1,4 @@
-// 시나리오 정보 패널. 위쪽 메뉴는 셋이다: 조사 보드(파티 전원의 단서) · 단서·소지품(내 아이템과 내가 얻은 단서, 지난 판까지의 단서 노트) ·
+// 시나리오 정보 패널. 위쪽 메뉴는 셋이다: 조사 보드(파티 전원의 단서) · 단서·소지품(내 아이템과 내가 이번 판에 얻은 단서) ·
 // 자료(대상 정보와 지난 기록, 안에서 전환한다).
 import type { ScenarioView } from '../../scenario/view.ts'
 import type { JournalEntry } from '../storage.ts'
@@ -23,9 +23,7 @@ export function ScenarioDrawer({
   onClose: () => void
 }) {
   const e = view.entity
-  // 나의 단서: 이번 판에서 내가 얻은 것 + 지난 판에서 단서 노트에 남은 것(이번 판에 다시 얻은 것은 위에 있으므로 뺀다)
   const mine = myClues(view)
-  const past = view.notebook.filter((f) => !mine.some((c) => c.id === f.id))
   /** `on`: 이 메뉴가 켜져 있는 것으로 보이는 탭들 (자료는 대상 정보와 지난 기록을 함께 품는다) */
   const tabs: { id: ScenarioTab; label: string; key: string; badge?: number; on: ScenarioTab[] }[] = [
     ...(view.board ? [{ id: 'board' as const, label: '조사 보드', key: 'Q', on: ['board' as const] }] : []),
@@ -160,17 +158,10 @@ export function ScenarioDrawer({
               <h3 className="mb-1 mt-8 border-t border-edge pt-6 text-xs text-ash">나의 단서</h3>
               <p className="mb-2 text-xs text-ash/70">파티원이 얻은 단서는 조사 보드에서 이름과 함께 볼 수 있다.</p>
               <ul className="space-y-2">
-                {mine.length === 0 && past.length === 0 && <li className="text-sm text-ash">아직 없다.</li>}
-                {/* 이번 판에서 내가 얻은 단서, 그리고 지난 판에서 노트에 남은 단서 */}
+                {mine.length === 0 && <li className="text-sm text-ash">아직 없다.</li>}
                 {mine.map((c) => (
                   <li key={c.id} className="font-serif-kr text-sm leading-7 text-glow">
                     ◆ {c.text}
-                  </li>
-                ))}
-                {past.map((f) => (
-                  <li key={f.id} className="font-serif-kr text-sm leading-7 text-ash">
-                    ◆ {f.text}
-                    <span className="ml-1.5 font-sans text-xs">(지난 판)</span>
                   </li>
                 ))}
               </ul>

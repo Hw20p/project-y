@@ -19,10 +19,8 @@ export interface DossierView {
 export interface ClueView {
   id: string
   text: string
-  /** 이번 판에서 이 단서를 얻은 사람들. 지난 판에서 알아낸 것(`old`)은 비어 있다. */
+  /** 이번 판에서 이 단서를 얻은 사람들 */
   by: { id: string; name: string }[]
-  /** 지난 판에서 알아낸 것(단서 노트)이고 이번 판에는 아무도 모른다 */
-  old: boolean
 }
 
 /** 조사 보드의 의문 하나 */
@@ -35,7 +33,7 @@ export interface BoardQuestionView {
   current: boolean
   /** 풀렸을 때만 */
   answer: string | null
-  /** 이 의문과 관련해 파티 누구라도 알아낸 단서 (얻은 사람 이름 포함). `old`는 내 단서 노트에만 있는 지난 판의 것이다. */
+  /** 이 의문과 관련해 파티 누구라도 알아낸 단서 (얻은 사람 이름 포함). */
   clues: ClueView[]
 }
 
@@ -98,6 +96,11 @@ export interface SceneView {
   solo: SoloView | null
   /** 개인 장면: 내 개인 행동이 끝났는지 */
   mineDone: boolean
+  /**
+   * 개인 장면: 고르는 선택지가 전부 자동(`auto`)이라 고르는 화면이 없는 장면(조사 뒤의 파고들기). 이 장면에 들어온 사람은
+   * 장면 글과 선택지를 건너뛰고 바로 첫 단계에 선다 — 화면은 이 사람에게 장면 글과 선택지를 보이지 않는다.
+   */
+  auto: boolean
   /** 개인 장면: 지금까지 나에게만 보인 글 (끝난 뒤에도 남는다) */
   myLines: string[]
 }
@@ -150,12 +153,10 @@ export interface ScenarioView {
   players: PlayerView[]
   /** 며칠째 낮/밤인지 (시나리오가 장면에 시간대를 정해 둔 경우에만) */
   timeOfDay: { day: number; period: 'day' | 'night' } | null
-  /** 정보 패널(대상 정보)용. 대상 자료는 내 단서 노트에 따라 열린다. */
+  /** 정보 패널(대상 정보)용. 대상 자료는 이번 판에서 파티 누구라도 알아낸 단서에 따라 열린다. */
   entity: EntityView
   /** 이번 판에서 파티 누구라도 알아낸 단서 전부 (얻은 사람 이름 포함). 알아낸 순서대로. */
   clues: ClueView[]
-  /** 단서 노트: 지금까지 알아낸 사실 (지난 판 것까지) */
-  notebook: HintDef[]
   /** 조사 보드 (시나리오에 있을 때만) */
   board: BoardView | null
   /** 아이템 id → 이름 (변화 칩에 "○○ 획득"을 쓰기 위함) */
@@ -179,7 +180,7 @@ function growthHints(effects: Effect[] | undefined): string[] {
   return out
 }
 
-const BASE_SCENE = { choices: [], myChoiceId: null, solo: null, mineDone: false, myLines: [] } satisfies Partial<SceneView>
+const BASE_SCENE = { choices: [], myChoiceId: null, solo: null, mineDone: false, auto: false, myLines: [] } satisfies Partial<SceneView>
 
 /** 투표 선택지의 섞인 순서를 정하는 값: 판의 시드·장면·선택지로 정해지므로 모두에게 같고, 다시 그려도 바뀌지 않는다 */
 function orderKey(seed: number, nodeId: string, choiceId: string): number {
@@ -277,6 +278,7 @@ export function viewForScenario(sc: Scenario, g: ScenarioGame, playerId: string)
       }),
       myChoiceId: picked,
       mineDone: !!prog?.done,
+      auto: node.options.length > 0 && node.options.every((o) => o.auto),
       myLines: prog?.lines ?? [],
       solo: step
         ? {
@@ -321,13 +323,6 @@ export function viewForScenario(sc: Scenario, g: ScenarioGame, playerId: string)
     }
   }
 
-  // ───── 단서 노트와 대상 자료
-  const book = g.notebooks[playerId] ?? []
-  // 판마다 바뀌는 값에 대한 사실(`run`)은 판이 바뀌면 뜻이 없어지므로 단서 노트에서 뺀다
-  const notebook = book
-    .map((id) => sc.facts.find((f) => f.id === id))
-    .filter((f): f is HintDef => !!f && !f.run)
-
   // ───── 단서: 파티 누구라도 알아낸 것은 얻은 사람의 이름과 함께 모두에게 보인다
   const foundBy = new Map<string, { id: string; name: string }[]>() // 알아낸 순서대로 (사람 순서, 사람마다 얻은 순서)
   for (const p of run.players) {
@@ -337,12 +332,12 @@ export function viewForScenario(sc: Scenario, g: ScenarioGame, playerId: string)
       foundBy.set(id, list)
     }
   }
-  const clueOf = (id: string, old: boolean): ClueView | null => {
+  const clueOf = (id: string): ClueView | null => {
     const f = sc.facts.find((x) => x.id === id)
-    return f ? { id, text: f.text, by: old ? [] : (foundBy.get(id) ?? []), old } : null
+    return f ? { id, text: f.text, by: foundBy.get(id) ?? [] } : null
   }
   const nonNull = (c: ClueView | null): c is ClueView => !!c
-  const clues = [...foundBy.keys()].map((id) => clueOf(id, false)).filter(nonNull)
+  const clues = [...foundBy.keys()].map((id) => clueOf(id)).filter(nonNull)
 
   // ───── 조사 보드
   const board: BoardView | null = sc.board
@@ -350,24 +345,23 @@ export function viewForScenario(sc: Scenario, g: ScenarioGame, playerId: string)
         goal: sc.board.goal,
         questions: sc.board.questions.map((q): BoardQuestionView => {
           const shared = q.facts.filter((id) => foundBy.has(id))
-          const old = book.filter((id) => q.facts.includes(id) && !foundBy.has(id) && !sc.facts.find((f) => f.id === id)?.run)
           const solved = evalCond(q.solved, ctx)
           const open = !!q.open && evalCond(q.open, ctx)
-          const revealed = solved || open || shared.length > 0 || old.length > 0
+          const revealed = solved || open || shared.length > 0
           return {
             id: q.id,
             text: revealed ? q.text : null,
             solved,
             current: open && !solved,
             answer: solved ? evalText(q.answer, ctx) : null,
-            clues: [...shared.map((id) => clueOf(id, false)), ...old.map((id) => clueOf(id, true))].filter(nonNull),
+            clues: shared.map(clueOf).filter(nonNull),
           }
         }),
       }
     : null
-  // 대상 자료는 파티 누구라도 그 단서를 알아냈거나 내 단서 노트에 있으면 열린다
+  // 대상 자료는 이번 판에서 파티 누구라도 그 단서를 알아내면 열린다
   const dossier: DossierView[] = (sc.dossier ?? []).map((d) => {
-    if (!d.unlock?.hint || book.includes(d.unlock.hint) || foundBy.has(d.unlock.hint)) return { id: d.id, title: d.title, lines: d.lines }
+    if (!d.unlock?.hint || foundBy.has(d.unlock.hint)) return { id: d.id, title: d.title, lines: d.lines }
     return { id: d.id, title: d.title, lines: null, lockNote: '아직 잠겨 있다' }
   })
 
@@ -459,7 +453,6 @@ export function viewForScenario(sc: Scenario, g: ScenarioGame, playerId: string)
       dossier,
     },
     clues,
-    notebook,
     board,
     itemNames: Object.fromEntries(sc.items.map((i) => [i.id, i.name])),
     aftermath: visibleTo(run.aftermath, playerId),

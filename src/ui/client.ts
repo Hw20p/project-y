@@ -21,7 +21,7 @@ export interface ScenarioClient {
   journalKey: string
   /** 방장 전용: 안 고른 사람을 기다리지 않고 진행 */
   force?: () => void
-  /** 방장 전용, 엔딩 뒤: 같은 대상으로 새 판 (단서 노트는 남는다) */
+  /** 방장 전용, 엔딩 뒤: 같은 대상으로 새 판 (닿은 엔딩 기록만 남는다) */
   retry?: () => void
   /** 방장 전용, 엔딩 뒤: 대기실로 돌아가 대상·입사 배경을 다시 고른다 */
   rematch?: () => void

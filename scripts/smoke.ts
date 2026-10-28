@@ -84,7 +84,7 @@ function seedWithCode(code: string): number {
   console.log('통과: 이야기 장면 진행')
 }
 
-// 4) 분할 장면: 정원, 비공개 발견, 조합, 부상 제한, 단서 노트
+// 4) 분할 장면: 정원, 비공개 발견, 조합, 부상 제한, 단서 공개
 {
   const seed = seedWithCode('파랑')
   let g = readyAll(createScenarioGame(demo, { seed, players: two }))
@@ -125,18 +125,17 @@ function seedWithCode(code: string): number {
   assert.deepEqual(viewForScenario(demo, g, 'b').clues.map((c) => [c.id, c.by.map((x) => x.id)]), [['note', ['a']]], '다른 사람이 얻은 단서도 b의 단서 목록에 이름과 함께 있다')
   assert.ok(rbView.changes.some((c) => c.kind === 'hurt' && c.playerId === 'b'), '부상은 모두에게 보인다')
   assert.ok(!JSON.stringify(rbView).includes('파랑'), '남의 비공개 글은 전달되지 않는다')
-  assert.deepEqual(g.notebooks.a, ['note'])
-  assert.deepEqual(g.notebooks.b, [])
+  assert.deepEqual(g.run.players[0].facts, ['note'])
+  assert.deepEqual(g.run.players[1].facts, [])
   assert.ok(g.run.players[1].hurt)
   g = readyAll(g)
   assert.equal(g.run.nodeId, 'door')
   assert.equal(g.run.time, 2)
 
-  // 단서 노트와 대상 자료: 파티 누구라도 알아낸 단서의 자료는 모두에게 열린다 (노트는 얻은 사람 것만 남는다)
+  // 대상 자료: 파티 누구라도 알아낸 단서의 자료는 모두에게 열린다
   assert.ok(viewForScenario(demo, g, 'a').entity.dossier.find((d) => d.id === 'note')!.lines)
   assert.ok(viewForScenario(demo, g, 'b').entity.dossier.find((d) => d.id === 'note')!.lines)
-  assert.equal(viewForScenario(demo, g, 'a').notebook[0].id, 'note')
-  console.log('통과: 분할 장면(정원·비공개 발견·조합·부상·단서 노트)')
+  console.log('통과: 분할 장면(정원·비공개 발견·조합·부상·단서 공개)')
 }
 
 // 5) 부상자는 몸을 쓰는 행동을 못 한다
@@ -233,7 +232,7 @@ function seedWithCode(code: string): number {
   console.log('통과: 전원 부상 엔딩')
 }
 
-// 8) 다시 도전: 새 판, 단서 노트와 닿은 엔딩은 남는다
+// 8) 다시 도전: 새 판은 처음부터이고, 닿은 엔딩 기록만 남는다
 {
   let g = readyAll(createScenarioGame(demo, { seed: seedWithCode('파랑'), players: two }))
   g = readyAll(pick(pick(g, 'a', 'read-note'), 'b', 'search-room'))
@@ -245,14 +244,14 @@ function seedWithCode(code: string): number {
   assert.equal(again.run.phase, 'story')
   assert.equal(again.run.time, 0)
   assert.deepEqual(again.run.players.map((p) => p.facts), [[], []], '이번 판의 단서는 비워진다')
-  assert.deepEqual(again.notebooks.a, ['note'], '단서 노트는 남는다')
   assert.equal(again.endings.good, 1)
   const v = viewForScenario(demo, again, 'a')
-  assert.equal(v.notebook.length, 1)
+  assert.equal(v.clues.length, 0, '이번 판의 단서는 아무도 모른다')
+  assert.equal(v.entity.dossier.find((d) => d.id === 'note')!.lines, null, '지난 판에서 연 자료도 새 판에서는 다시 잠겨 있다')
   assert.equal(v.endings.total, 4)
   assert.deepEqual(v.endings.reached.map((e) => e.id), ['good'])
   assert.equal(act(readyAll(createScenarioGame(demo, { seed: 1, players: two })), { type: 'retry' }).runNo, 1, '엔딩 전에는 다시 도전할 수 없다')
-  console.log('통과: 다시 도전(단서 노트·엔딩 기록 유지)')
+  console.log('통과: 다시 도전(처음부터·엔딩 기록만 유지)')
 }
 
 // 9) 무작위로 아무렇게나 눌러도 멈추거나 에러 나지 않는다 (인원 1~4명)

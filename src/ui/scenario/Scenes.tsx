@@ -294,9 +294,12 @@ export function PersonalScene({ view, send, reading }: { view: ScenarioView; sen
   const pickedOption = scene.choices.find((c) => c.id === picked)
   // 모두가 골라서 적용된 뒤에는 더 바꿀 수 없다 (혼자 진행하는 단계가 있거나, 내 행동이 끝났다)
   const applied = !!scene.solo || scene.mineDone
+  // 고르는 화면이 없는 장면(조사 뒤의 파고들기)에 들어온 사람은 장면 글과 선택지 없이 바로 단계만 본다. 조사하지 않은 사람은 기다린다는 안내를 본다.
+  const skipIntro = scene.auto && !!picked
+  const introText = skipIntro ? '' : scene.text
 
-  const beats = useMemo(() => splitBeats(scene.text), [scene.text])
-  const { steps, at } = useSteps(beatSteps(beats, [['choices', 0, 0]]), [scene.text])
+  const beats = useMemo(() => splitBeats(introText), [introText])
+  const { steps, at } = useSteps(beatSteps(beats, [['choices', 0, 0]]), [introText])
   const seq = useSequence(steps)
   const ready = seq.i >= at.choices
 
@@ -320,12 +323,12 @@ export function PersonalScene({ view, send, reading }: { view: ScenarioView; sen
       <Beats beats={beats} at={at} seq={seq} />
 
       <Appear step={at.choices} seq={seq}>
-        {!applied && (
+        {!applied && !skipIntro && (
           <p className="mt-4 text-xs text-ash">
             모두가 고를 때까지 바꾸거나 취소할 수 있다 (다른 선택지를 누르면 바뀌고, 같은 것을 다시 누르면 취소된다). 결과는 모두가 고른 뒤에 나에게만 보이고, 누가 무엇을 골랐는지는 모두에게 보인다.
           </p>
         )}
-        <ul className="mt-3 space-y-2.5">
+        <ul className={`mt-3 space-y-2.5 ${skipIntro ? 'hidden' : ''}`}>
           {scene.choices.map((c, i) => {
             const mine = picked === c.id
             const disabled = !!c.locked || applied

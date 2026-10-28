@@ -56,13 +56,9 @@ export function BoardPanel({ board, view }: { board: BoardView; view: ScenarioVi
               {q.clues.length > 0 ? (
                 <ul className="mt-2 space-y-1">
                   {q.clues.map((c) => (
-                    <li key={c.id} className={`font-serif-kr text-sm leading-7 ${c.old ? 'text-ash' : 'text-glow'}`}>
+                    <li key={c.id} className="font-serif-kr text-sm leading-7 text-glow">
                       ◆ {c.text}
-                      {c.old ? (
-                        <span className="ml-1.5 text-xs">(지난 판)</span>
-                      ) : (
-                        <span className="ml-2 font-sans text-xs text-ash">{clueWho(c.by, view)}</span>
-                      )}
+                      <span className="ml-2 font-sans text-xs text-ash">{clueWho(c.by, view)}</span>
                     </li>
                   ))}
                 </ul>

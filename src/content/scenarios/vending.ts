@@ -1399,7 +1399,7 @@ export const vending: Scenario = {
     { id: 'tongs', name: '집게', text: '끝이 반질반질 닳은 긴 집게. 손을 대지 않고 동전을 집을 수 있다.' },
   ],
   facts: [
-    // 어느 판에서나 같은 사실 (단서 노트에 남는다)
+    // 어느 판에서나 같은 사실
     { id: 'machine-sums', text: '자판기는 받은 것의 무게만큼만 내준다.' },
     { id: 'door-locked', text: '휴게실 문은 정전 중에는 열리지 않는다. 자판기만 켜져 있다.' },
     { id: 'wall-writing', text: '자판기 옆 벽에 전임자들의 낙서가 빼곡하다.' },
@@ -1416,7 +1416,7 @@ export const vending: Scenario = {
     { id: 'change-night-ledger', text: '장부의 오늘 줄 합계 칸은 비어 있다. 합이 0이어야 거래가 닫힌다.' },
     { id: 'change-night-warm', text: '반환구의 동전은 아직 따뜻하다. 쥐면 놓기 어려울 것 같다.' },
     { id: 'change-no-cover', text: '반환구를 막아도 장부는 닫히지 않는다. 안쪽에서 동전이 밀어 올린다.' },
-    // 판마다 바뀌는 값에 대한 사실 (조사 보드에만 붙고 단서 노트에는 남지 않는다)
+    // 판마다 바뀌는 값에 대한 사실 (조사 보드에 붙는다)
     ...ITEM_ORDER.flatMap((p) => [
       { id: `yday-${p}`, text: `영수증의 어제 거래: ${itemLabel(yesterdayOf(p))}.`, run: true },
       { id: `night-last-${p}`, text: `벽 맨 위의 가장 최근 낙서의 품목: ${itemLabel(yesterdayOf(p))}.`, run: true },

@@ -34,7 +34,7 @@ export type ScenarioAction =
    * 읽기·결과 단계에서는 그냥 다음으로 넘어가고, 개인 장면에서는 아직 안 끝난 사람의 진행을 거기서 끝낸다.
    */
   | { type: 'force' }
-  /** 엔딩 뒤 새 판을 시작한다 (단서 노트와 닿은 엔딩은 남는다) */
+  /** 엔딩 뒤 새 판을 시작한다 (닿은 엔딩 기록만 남고, 단서·스텟·아이템은 모두 처음으로) */
   | { type: 'retry' }
 
 // ───────────────────────── 조회 ─────────────────────────
@@ -75,6 +75,7 @@ function baseActionOpen(g: ScenarioGame, action: SplitAction, p: RunPlayer): Act
   if (action.when && !evalCond(action.when, { run: g.run, actor: p.id, viewer: p.id })) {
     return { open: false, reason: action.locked ?? '' }
   }
+  if (action.gate && !evalCond(action.gate.cond, { run: g.run, actor: p.id, viewer: p.id })) return { open: false, reason: action.gate.locked }
   if (action.needsHealthy && p.hurt && !action.calming) return { open: false, reason: action.locked ?? '부상 때문에 할 수 없다' }
   return { open: true }
 }
@@ -148,7 +149,6 @@ export function createScenarioGame(sc: Scenario, options: ScenarioOptions): Scen
     baseSeed: options.seed >>> 0,
     runNo: 0,
     run: undefined as never, // startRun이 바로 채운다
-    notebooks: Object.fromEntries(roster.map((p) => [p.id, [] as string[]])),
     endings: {},
   }
   startRun(sc, g, roster, options.vars)
@@ -343,8 +343,11 @@ function go(sc: Scenario, g: ScenarioGame, target: string, depth = 0, carry: Cha
   run.votes = {}
   run.picks = {}
   run.personal = {}
-  // 직전 조사의 선택은 바로 다음 개인 장면까지만 남는다
-  if (node.kind !== 'personal') delete run.lastSplit
+  // 직전 조사의 선택과 보관해 둔 조사 결과는 바로 다음 개인 장면까지만 남는다
+  if (node.kind !== 'personal') {
+    delete run.lastSplit
+    delete run.held
+  }
   run.ready = []
   run.result = null
   // 밤에서 낮으로 넘어가면 하루가 지난다: 하루씩 흐르는 시계(`clock.byDay`)는 이때 1 오른다 (오답·패스든 성공이든 똑같이)
@@ -515,7 +518,7 @@ function resolveSplit(sc: Scenario, g: ScenarioGame, node: SplitNode): void {
     go(sc, g, next)
     return
   }
-  run.result = {
+  const result: ScenarioResult = {
     kind: 'split',
     nodeId: node.id,
     ...(node.label ? { label: node.label } : {}),
@@ -526,6 +529,14 @@ function resolveSplit(sc: Scenario, g: ScenarioGame, node: SplitNode): void {
     changes,
     next,
   }
+  // 이어지는 곳이 개인 장면(파고들기)이면 결과를 보관해 두고 바로 그리로 간다: 결과는 개인 장면이 끝난 뒤 한 번에 보인다.
+  // (효과로 마감·전원 부상이 되어 다른 곳으로 가야 하면 보관하지 않고 평소처럼 결과를 보인다.)
+  if (node.holdResult && findNode(sc, next).kind === 'personal' && !override(sc, g)) {
+    g.run.held = result
+    go(sc, g, next)
+    return
+  }
+  run.result = result
   run.phase = 'result'
   run.ready = []
   run.picks = {}
@@ -648,19 +659,35 @@ function settlePersonal(sc: Scenario, g: ScenarioGame, node: PersonalNode): void
     if (prog.lines.length > 0 || prog.changes.length > 0) any = true
   }
   const next = route(sc, g, node.next)
-  if (!any) {
+  const held = run.held
+  delete run.held
+  if (!any && !held) {
     go(sc, g, next)
     return
   }
-  run.result = {
-    kind: 'personal',
-    nodeId: node.id,
-    picks,
-    options: node.options.map((o) => ({ id: o.id, text: evalText(o.text, { run }) })),
-    text: '',
-    private: priv,
-    changes: [],
-    next,
+  if (held) {
+    // 앞의 분할 장면(조사)의 결과와 합친다: 사람마다 "조사에서 본 것 → 파고들기에서 본 것" 순서로 읽는다
+    const merged: Record<string, PrivateResult> = {}
+    for (const p of run.players) {
+      const before = held.private[p.id]
+      const after = priv[p.id]
+      merged[p.id] = {
+        text: [before?.text, after?.text].filter(Boolean).join('\n'),
+        changes: [...(before?.changes ?? []), ...(after?.changes ?? [])],
+      }
+    }
+    run.result = { ...held, private: merged, next }
+  } else {
+    run.result = {
+      kind: 'personal',
+      nodeId: node.id,
+      picks,
+      options: node.options.map((o) => ({ id: o.id, text: evalText(o.text, { run }) })),
+      text: '',
+      private: priv,
+      changes: [],
+      next,
+    }
   }
   run.phase = 'result'
   run.ready = []

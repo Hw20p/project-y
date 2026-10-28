@@ -306,10 +306,10 @@ for (const n of [1, 2]) {
   assert.throws(() => buildTasks({ tasks: [{ ...def, answers: [{ id: 'a', text: 'a', right: true }] }], after: 'x' }), /함께 쓸 수 없다/)
   assert.throws(() => buildTasks({ tasks: [{ ...def, chain: [{ ...def.chain![0], ok: undefined }, ...def.chain!.slice(1)] }], after: 'x' }), /근거를 보이는 이야기\(ok\)/)
   const rpt = validateScenario(tasksChain)
-  assert.deepEqual(rpt.errors, [], rpt.errors.join('\n'))
-  // 과제가 하나뿐인 시험용 시나리오라 풀이 순서의 후보가 하나인 경고만 허용한다
-  const others = rpt.warnings.filter((w) => !w.includes('후보가 2개 이상'))
-  assert.deepEqual(others, [], others.join('\n'))
+  // 과제가 하나뿐인 시험용 시나리오라 풀이 순서의 후보가 하나인 에러만 허용한다 (검증기는 이를 에러로 낸다)
+  const errs = rpt.errors.filter((e) => !e.includes('후보가 2개 이상'))
+  assert.deepEqual(errs, [], errs.join('\n'))
+  assert.deepEqual(rpt.warnings, [], rpt.warnings.join('\n'))
 
   const cs = (a: ScenarioGame, x: ScenarioAction) => reduceScenario(tasksChain, a, x)
   const cids = (g: ScenarioGame) => g.run.players.map((p) => p.id)
@@ -434,8 +434,12 @@ for (const n of [1, 2]) {
   }
   if (probe?.kind === 'split') {
     assert.deepEqual(probe.outcomes.map((o) => o.next), ['lock-dig', 'lock-think'])
+    assert.equal(probe.holdResult, true, '조사 결과는 파고들기가 끝날 때까지 미룬다')
   }
-  // 단계형 조사가 없는 과제에는 파고들기 장면이 없다
-  assert.equal(buildTasks({ tasks: [def], after: 'x' }).nodes.some((n) => n.id === 'lock-dig'), false)
+  // 단계형 조사가 없는 과제에는 파고들기 장면이 없고 조사 결과도 미루지 않는다
+  const plainBuilt = buildTasks({ tasks: [def], after: 'x' })
+  assert.equal(plainBuilt.nodes.some((n) => n.id === 'lock-dig'), false)
+  const plainProbe = plainBuilt.nodes.find((n) => n.id === 'lock-probe')
+  assert.ok(plainProbe?.kind === 'split' && !plainProbe.holdResult)
   console.log('통과: 단계형 조사의 빌더 검증과 파고들기 장면')
 }

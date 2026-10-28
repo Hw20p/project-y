@@ -242,7 +242,7 @@ export function ScenarioScreen({
                 <LightMeter view={view} />
               </span>
               <span className="text-ash">
-                닿아 본 엔딩 {view.endings.reached.length}/{view.endings.total} · 단서 노트 {view.notebook.length}
+                닿아 본 엔딩 {view.endings.reached.length}/{view.endings.total}
               </span>
             </div>
           </header>

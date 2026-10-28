@@ -10,7 +10,7 @@ import { viewForScenario } from '../src/scenario/view.ts'
 const act = (g: ScenarioGame, a: ScenarioAction) => reduceScenario(night, g, a)
 const readyAll = (g: ScenarioGame, ids: string[]) => ids.reduce((s, id) => act(s, { type: 'ready', playerId: id }), g)
 const crew = [
-  { id: 'a', name: '가', archetype: 'office' }, // 행운 3
+  { id: 'a', name: '가', archetype: 'office' }, // 체력 2, 관찰 3
   { id: 'b', name: '나', archetype: 'researcher' }, // 관찰 4
 ]
 /** 시작 이야기를 넘겨 밤(개인 장면)으로 */
@@ -28,8 +28,8 @@ const startNight = (players = crew, seed = 1) =>
   assert.deepEqual(rpt.warnings, [], rpt.warnings.join('\n'))
 
   const g = createScenarioGame(night, { seed: 1, players: [...crew, { id: 'c', name: '다', archetype: '없는배경' }] })
-  assert.deepEqual(g.run.players[0].stats, { sanity: 6, body: 1, insight: 2, luck: 3 })
-  assert.deepEqual(g.run.players[1].stats, { sanity: 6, body: 1, insight: 4, luck: 1 })
+  assert.deepEqual(g.run.players[0].stats, { sanity: 6, body: 2, insight: 3 })
+  assert.deepEqual(g.run.players[1].stats, { sanity: 6, body: 1, insight: 4 })
   assert.equal(g.run.players[2].archetype, 'rookie', '모르는 배경은 신입')
   const v = viewForScenario(night, g, 'a')
   assert.deepEqual(v.players[1].stats, g.run.players[1].stats, '파티원의 스텟이 모두에게 보인다')
@@ -46,23 +46,23 @@ const startNight = (players = crew, seed = 1) =>
   console.log('통과: 입사 배경·스텟·개인 장면 검증')
 }
 
-// 2) 개인 장면: 모두 고를 때까지는 바꾸거나 취소할 수 있고, 모두 고르면 각자에게 적용된다. 누가 뭘 골랐는지는 보인다. 기준선(행운)으로 열리는 선택지.
+// 2) 개인 장면: 모두 고를 때까지는 바꾸거나 취소할 수 있고, 모두 고르면 각자에게 적용된다. 누가 뭘 골랐는지는 보인다. 기준선(체력)으로 열리는 선택지.
 {
   let g = startNight()
   assert.equal(g.run.phase, 'personal')
   const va = viewForScenario(night, g, 'a')
   assert.equal(va.scene!.kind, 'personal')
-  // 행운 기준선: 사무직(행운 3)은 서랍을 열 수 있고, 연구원(행운 1)은 잠긴 문구만 본다
-  assert.equal(va.scene!.choices.find((c) => c.id === 'lucky')!.locked, undefined)
+  // 체력 기준선: 사무직(체력 2)은 서랍을 열 수 있고, 연구원(체력 1)은 잠긴 문구만 본다
+  assert.equal(va.scene!.choices.find((c) => c.id === 'drawer')!.locked, undefined)
   assert.equal(
-    viewForScenario(night, g, 'b').scene!.choices.find((c) => c.id === 'lucky')!.locked,
-    '운이 따라야 찾을 수 있을 것 같다',
+    viewForScenario(night, g, 'b').scene!.choices.find((c) => c.id === 'drawer')!.locked,
+    '서랍이 뻑뻑하다. 힘이 있어야 열 수 있을 것 같다',
   )
-  assert.equal(act(g, { type: 'pick', playerId: 'b', actionId: 'lucky' }), g, '기준에 못 미치면 고를 수 없다')
+  assert.equal(act(g, { type: 'pick', playerId: 'b', actionId: 'drawer' }), g, '기준에 못 미치면 고를 수 없다')
 
   // a가 훈련을 골라도 아직 아무것도 적용되지 않는다. b의 화면에는 누가 골랐는지만 보인다.
   g = act(g, { type: 'pick', playerId: 'a', actionId: 'train' })
-  assert.equal(g.run.players[0].stats.body, 1, '모두 고르기 전에는 적용되지 않는다')
+  assert.equal(g.run.players[0].stats.body, 2, '모두 고르기 전에는 적용되지 않는다')
   assert.deepEqual(viewForScenario(night, g, 'b').scene!.choices.find((c) => c.id === 'train')!.pickerIds, ['a'])
   assert.equal(viewForScenario(night, g, 'b').players[0].progress, 'picked')
   assert.equal(viewForScenario(night, g, 'a').scene!.myLines.length, 0, '결과 글도 아직 없다')
@@ -81,7 +81,7 @@ const startNight = (players = crew, seed = 1) =>
 
   // 마지막 사람이 고르면 한꺼번에 적용된다
   g = act(g, { type: 'pick', playerId: 'b', actionId: 'train' })
-  assert.equal(g.run.players[0].stats.body, 2)
+  assert.equal(g.run.players[0].stats.body, 3)
   assert.equal(g.run.players[1].stats.body, 2)
   assert.equal(g.run.phase, 'result')
   assert.equal(act(g, { type: 'cancel', playerId: 'a' }), g, '적용된 뒤에는 거둘 수 없다')
@@ -90,7 +90,7 @@ const startNight = (players = crew, seed = 1) =>
   let f = startNight()
   f = act(f, { type: 'pick', playerId: 'a', actionId: 'train' })
   f = act(f, { type: 'force' })
-  assert.equal(f.run.players[0].stats.body, 2, '고른 것은 적용된다')
+  assert.equal(f.run.players[0].stats.body, 3, '고른 것은 적용된다')
   assert.equal(f.run.players[1].stats.body, 1, '안 고른 사람은 아무것도 하지 않는다')
   console.log('통과: 개인 장면(모두 고른 뒤 적용·선택 공개·취소·스텟 기준선)')
 }
@@ -98,7 +98,7 @@ const startNight = (players = crew, seed = 1) =>
 // 3) 개인 단계: 고른 뒤 혼자 이어지는 장면. 단서는 본인만 얻고 결과는 본인에게만 보인다.
 {
   let g = startNight()
-  g = act(g, { type: 'pick', playerId: 'a', actionId: 'lucky' })
+  g = act(g, { type: 'pick', playerId: 'a', actionId: 'drawer' })
   assert.ok(!g.run.players[0].items.includes('lamp'), '모두 고르기 전에는 얻지 못한다')
   g = act(g, { type: 'pick', playerId: 'b', actionId: 'cellar' })
   assert.ok(g.run.players[0].items.includes('lamp'))
@@ -121,8 +121,7 @@ const startNight = (players = crew, seed = 1) =>
   assert.equal(viewForScenario(night, g, 'b').scene!.solo!.choices.length, 0)
   g = act(g, { type: 'ready', playerId: 'b' })
   assert.equal(g.run.phase, 'result')
-  assert.deepEqual(g.notebooks.b, ['drip', 'mark'])
-  assert.deepEqual(g.notebooks.a, [])
+  assert.deepEqual(g.run.players[0].facts, [])
 
   // 결과: 각자 자기 글만, 스텟 변화는 모두에게
   const ra = viewForScenario(night, g, 'a').result!
@@ -132,10 +131,10 @@ const startNight = (players = crew, seed = 1) =>
   assert.match(rb.mine!.text, /물소리는 일정한 박자/)
   assert.ok(!JSON.stringify(ra).includes('물소리'), '남의 개인 기록은 전달되지 않는다')
   assert.ok(ra.changes.some((c) => c.kind === 'stat' && c.playerId === 'b' && c.amount === -1), '남의 정신력 변화는 모두에게 보인다')
-  assert.deepEqual(ra.picks, { a: 'lucky', b: 'cellar' }, '누가 무엇을 골랐는지는 결과에도 남는다')
+  assert.deepEqual(ra.picks, { a: 'drawer', b: 'cellar' }, '누가 무엇을 골랐는지는 결과에도 남는다')
   g = readyAll(g, ['a', 'b'])
   assert.equal(g.run.nodeId, 'day')
-  console.log('통과: 개인 단계(혼자 이어지는 장면·비공개 기록·단서 노트)')
+  console.log('통과: 개인 단계(혼자 이어지는 장면·비공개 기록)')
 }
 
 // 4) 정신을 잃음: 투표에서 빠지고, 개인 장면에서는 진정시키는 선택지만 고를 수 있다. 회복하면 돌아온다.
@@ -240,7 +239,7 @@ const startNight = (players = crew, seed = 1) =>
   assert.equal(g.run.phase, 'ended')
   const again = act(g, { type: 'retry' })
   assert.deepEqual(again.run.players.map((p) => p.archetype), ['office', 'researcher'])
-  assert.deepEqual(again.run.players[0].stats, { sanity: 6, body: 1, insight: 2, luck: 3 }, '스텟은 처음으로')
+  assert.deepEqual(again.run.players[0].stats, { sanity: 6, body: 2, insight: 3 }, '스텟은 처음으로')
   console.log('통과: 다시 도전(배경 유지·스텟 초기화)')
 }
 

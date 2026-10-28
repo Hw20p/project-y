@@ -279,7 +279,7 @@ function stateKey(g: ScenarioGame, rel: Relevance): string {
     sorted(r.flags),
     r.players
       .map((p) => {
-        const stats = (['sanity', 'body', 'insight', 'luck'] as const)
+        const stats = (['sanity', 'body', 'insight'] as const)
           .filter((k) => rel.stats.has(k))
           .map((k) => Math.min(p.stats[k], rel.caps[k] ?? 99))
         return `${p.id}:${stats.join('.')}:${sorted(p.items.filter((i) => rel.items.has(i)))}:${sorted(p.facts.filter((f) => rel.facts.has(f)))}:${p.hurt ? 1 : 0}`

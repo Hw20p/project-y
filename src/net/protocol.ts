@@ -30,7 +30,7 @@ export type ClientMsg =
   | { t: 'mode'; mode: string }
   /** 대기실: 내 입사 배경(시작 스텟)을 고른다 */
   | { t: 'archetype'; archetype: string }
-  /** 방장 전용, 시나리오 엔딩 뒤: 같은 대상으로 새 판을 시작한다 (단서 노트·닿은 엔딩은 남는다) */
+  /** 방장 전용, 시나리오 엔딩 뒤: 같은 대상으로 새 판을 시작한다 (닿은 엔딩 기록만 남고 나머지는 처음으로) */
   | { t: 'retry' }
   /** 서술을 읽는 중인지 (일시적 접속 정보, 게임 상태가 아님) */
   | { t: 'reading'; reading: boolean }

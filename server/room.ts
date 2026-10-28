@@ -208,7 +208,7 @@ export class Room {
     this.commitScenario({ ...action, playerId: member.id } as ScenarioAction)
   }
 
-  /** 방장 전용, 엔딩 뒤: 같은 대상으로 새 판 (단서 노트·닿은 엔딩은 남는다) */
+  /** 방장 전용, 엔딩 뒤: 같은 대상으로 새 판 (닿은 엔딩 기록만 남고 나머지는 처음으로) */
   retry(by: Member): Result<true> {
     if (!this.sgame || this.sgame.run.phase !== 'ended') return { ok: false, error: '엔딩 뒤에만 다시 도전할 수 있습니다.' }
     if (by.id !== this.hostId) return { ok: false, error: '방장만 다시 도전할 수 있습니다.' }

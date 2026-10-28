@@ -280,13 +280,14 @@ export function validateScenario(sc: Scenario): ValidationReport {
       const actions = new Set(n.actions.map((a) => a.id))
       if (n.actions.length < 2) at(where, '행동이 2개 이상 필요함')
       unique(where, n.actions.map((a) => a.id))
-      if (!n.actions.some((a) => !a.when && !a.needsHealthy && a.max === undefined && a.min === undefined)) {
+      if (!n.actions.some((a) => !a.when && !a.gate && !a.needsHealthy && a.max === undefined && a.min === undefined)) {
         at(where, '언제나 고를 수 있는 행동이 없음 (모두 잠기거나 정원이 차면 게임이 멈춘다)')
       }
       for (const a of n.actions) {
         const w = `${where}/${a.id}`
         text(a.text, SCENE_TEXT, `${w} 문장`)
         if (a.when) cond(a.when, ACTION_WHEN, `${w} 조건`)
+        if (a.gate) cond(a.gate.cond, ACTION_WHEN, `${w} 자격`)
         if (a.max !== undefined && a.max < 1) at(w, 'max는 1 이상이어야 함')
         if (a.min !== undefined) {
           if (!Number.isInteger(a.min) || a.min < 2) at(w, 'min은 2 이상의 정수여야 함')
@@ -304,6 +305,13 @@ export function validateScenario(sc: Scenario): ValidationReport {
         effects(f.later, true, true, `${w} 나중 효과`, actions)
       }
       if (n.outcomes.length === 0) at(where, '결과가 없음')
+      if (n.holdResult) {
+        const goesToPersonal = n.outcomes.some((o) => {
+          const to = typeof o.next === 'string' ? [o.next] : o.next.map((x) => x.to)
+          return to.some((id) => sc.nodes.find((m) => m.id === id)?.kind === 'personal')
+        })
+        if (!goesToPersonal) at(where, 'holdResult는 결과가 개인 장면으로 이어질 때만 의미가 있음')
+      }
       n.outcomes.forEach((o, i) => {
         const w = `${where}/결과 ${i + 1}`
         if (o.when) cond(o.when, OUTCOME, `${w} 조건`, actions)
@@ -418,7 +426,7 @@ export function validateArchetypes(list: Archetype[]): string[] {
       if (a.stats[k] < 0 || a.stats[k] > STAT_MAX[k]) errors.push(`입사 배경 ${a.id}: ${k} ${a.stats[k]}가 0~${STAT_MAX[k]} 밖`)
     }
     if (a.stats.sanity !== list[0].stats.sanity) errors.push(`입사 배경 ${a.id}: 정신력이 다른 배경과 다름`)
-    if (aptitude(a) !== aptitude(list[0])) errors.push(`입사 배경 ${a.id}: 체력·관찰·행운의 합이 다른 배경과 다름`)
+    if (aptitude(a) !== aptitude(list[0])) errors.push(`입사 배경 ${a.id}: 체력·관찰의 합이 다른 배경과 다름`)
   }
   return errors
 }

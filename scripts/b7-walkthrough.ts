@@ -441,10 +441,11 @@ const endingOf = (g: ScenarioGame) => toEnd(g).run.endingId
   g = pickEach(g, { 0: 'panel', 1: 'glance' }, 'lift-wait')
   assert.equal(g.run.players[0].stats.sanity, s0[0] - 3, '위험한 곳을 읽은 사람은 정신력을 잃는다')
   assert.equal(g.run.players[1].stats.sanity, s0[1], '평범한 곳은 대가가 없다')
+  // 대가는 조사를 고른 직후에 치르고, 이야기와 단서는 파고들기를 맞게 마친 뒤 조사 결과에 한 번에 나온다
+  g = solos(solos(g, 'p1', 'scrawl-1-good', 'scrawl-2-good-0'), 'p2', 'glance-1-good', 'glance-2-good-0')
   assert.match(view(g, 'p1').result!.mine!.text, /안쪽에서/, '위험한 곳의 이야기가 붙는다')
   assert.doesNotMatch(view(g, 'p2').result!.mine!.text, /안쪽에서/, '평범한 곳에는 붙지 않는다')
-  // 대가와 이야기는 조사를 고른 직후에 붙고, 단서는 파고들기를 맞게 마친 뒤에 나온다
-  g = settle(solos(solos(settle(g), 'p1', 'scrawl-1-good', 'scrawl-2-good-0'), 'p2', 'glance-1-good', 'glance-2-good-0'))
+  g = settle(g)
   assert.ok(g.run.players[0].facts.includes('lift-panel-press'), '위험해도 단서는 그대로 얻는다')
 
   // 소파: 쪽지 틈이 위험한 곳이면 다친다. 다친 사람은 몸을 쓰는 조사(소파 틈·만져 보기)를 못 하지만 읽는 조사는 한다.
@@ -577,9 +578,9 @@ const endingOf = (g: ScenarioGame) => toEnd(g).run.endingId
   }
   const before = lift({}).run.players.map((p) => p.facts.length) // 아무것도 살피지 않았을 때(첫 인상에서 얻은 단서만 있다)
   // 알아낼 것이 없는 곳(천장)과 낙서의 다른 길(손때)
-  const g0 = lift({ 0: 'ceiling', 1: 'buttons' })
-  assert.match(view(g0, 'p1').result!.mine!.text, /알아낼 만한 것은 없었다/)
-  const g = settle(solos(settle(g0), 'p2', 'grime-1-good', 'grime-2-good-0')) // 손때는 단계형 조사다
+  const g0 = solos(lift({ 0: 'ceiling', 1: 'buttons' }), 'p2', 'grime-1-good', 'grime-2-good-0') // 손때는 단계형 조사다
+  assert.match(view(g0, 'p1').result!.mine!.text, /알아낼 만한 것은 없었다/, '파고들기가 끝나면 모두의 조사 결과가 한 번에 나온다')
+  const g = settle(g0)
   assert.ok(!g.run.players[0].facts.includes('lift-panel-press'), '천장에서는 단서가 나오지 않는다')
   assert.ok(g.run.players[1].facts.includes('lift-panel-press'), '손때에서도 낙서와 같은 단서가 나온다')
   assert.equal(g.run.players[0].facts.length, before[0], '허탕인 곳은 단서를 더하지 않는다')
@@ -655,4 +656,84 @@ const endingOf = (g: ScenarioGame) => toEnd(g).run.endingId
     assert.ok(walked.run.players[0].facts.includes(`walk-${stairs}`), `${stairs}: 내려가 본 칸 수`)
   }
   console.log('통과: 단계형 조사(B7) — 패널·눌러 보기·돋보기·잉크·내려가 보기·벽의 눈금')
+}
+
+// 19) 스텟 지름길(계단): 체력·관찰이 3 이상이면 2단계 조사와 같은 단서를 첫날에 얻는다. 자격이 모자라면 숨지 않고 잠긴 채 보이며,
+// 이미 얻었으면 같은 단서를 주는 조사는 사라진다. (partyOf: p1 사무직 체력 2·관찰 3, p2 신입 체력 3·관찰 2)
+{
+  const toProbe = (stairs: StairsCount) => {
+    let g = start(2, 'stairs>lift>sofa', 'a', stairs)
+    for (const node of ['arrive', 'first-look', 'stairs-intro']) g = node === 'first-look' ? settle(pickEach(g, {}, 'desk')) : ready(g)
+    assert.equal(g.run.nodeId, 'stairs-probe')
+    return g
+  }
+  const choice = (g: ScenarioGame, who: string, id: string) => view(g, who).scene!.choices.find((c) => c.id === id)
+
+  for (const stairs of STAIRS) {
+    let g = toProbe(stairs)
+    assert.equal(choice(g, 'p1', 'keen')?.locked, undefined, '관찰 3: 열려 있다')
+    assert.match(choice(g, 'p1', 'stride')?.locked ?? '', /체력 3/, '체력 2: 잠긴 채 보이고 이유가 적혀 있다')
+    assert.equal(choice(g, 'p2', 'stride')?.locked, undefined, '체력 3: 열려 있다')
+    assert.match(choice(g, 'p2', 'keen')?.locked ?? '', /관찰 3/, '관찰 2: 잠긴 채 보인다')
+    assert.equal(act(g, { type: 'pick', playerId: 'p1', actionId: 'stride' }), g, '잠긴 조사는 고를 수 없다')
+
+    g = settle(pickEach(g, { 0: 'keen', 1: 'stride' }, 'stairs-wait'))
+    assert.equal(g.run.nodeId, 'stairs-think', '파고들기 없이 바로 추리로 간다')
+    assert.ok(g.run.players[0].facts.includes(`exact-${stairs}`), `${stairs}: 관찰 지름길은 정확한 기둥 수를 준다`)
+    assert.ok(g.run.players[1].facts.includes(`walk-${stairs}`), `${stairs}: 체력 지름길은 내려가 본 칸 수를 준다`)
+    assert.equal(g.run.players[0].stats.sanity, 6, '대가 없이 얻는다')
+    assert.ok(view(g).clues.some((c) => c.id === `walk-${stairs}`), '단서는 이름과 함께 모두에게 공개된다')
+  }
+
+  // 둘째 날(2단계)에 같은 단서를 주는 조사는 이미 얻었으면 사라지고, 못 얻었으면 그대로 있다
+  const day2 = (facts: string[]) => {
+    const g = structuredClone(toProbe(9))
+    g.run.flags.push('pass-stairs-1')
+    g.run.players[0].facts.push(...facts)
+    return g
+  }
+  const plain = day2([])
+  assert.ok(choice(plain, 'p1', 'walk') && choice(plain, 'p1', 'both'), '단서가 없으면 2단계 조사가 열린다')
+  const known = day2(['walk-9', 'exact-9'])
+  for (const id of ['walk', 'both', 'stride', 'keen']) assert.equal(choice(known, 'p2', id), undefined, `${id}: 같은 단서를 이미 얻었으면 보이지 않는다`)
+
+  console.log('통과: 스텟 지름길(계단) — 체력·관찰 3 이상 / 잠긴 채 보임 / 중복 조사는 사라짐')
+}
+
+// 20) 조사 결과는 파고들기가 끝난 뒤 한 번만 나온다: 조사 직후에는 결과 화면 없이 바로 파고들기로 가고, 끝나면 두 결과가 합쳐진다.
+{
+  const toProbe = () => {
+    let g = start(2, 'lift>sofa>stairs', 'a', 9)
+    for (const node of ['arrive', 'first-look', 'lift-intro']) g = node === 'first-look' ? settle(pickEach(g, {}, 'desk')) : ready(g)
+    return g
+  }
+  // 한 명만 단계형 조사를 하고 한 명은 지켜본다
+  let g = pickEach(toProbe(), { 0: 'panel' }, 'lift-wait')
+  assert.equal(g.run.nodeId, 'lift-dig', '조사 직후 곧바로 파고들기다')
+  assert.equal(g.run.phase, 'personal', '중간 결과 화면이 없다')
+  assert.equal(g.run.result, null)
+  assert.ok(g.run.held, '조사 결과는 보관되어 있다')
+  assert.equal(view(g, 'p1').scene!.auto, true, '고르는 화면이 없는 장면이다')
+  assert.equal(view(g, 'p1').scene!.myChoiceId, 'dig-panel', '조사를 맡은 사람은 자동으로 첫 단계에 서 있다')
+  assert.ok(view(g, 'p1').scene!.solo, '조사를 맡은 사람은 바로 단계를 본다')
+  assert.equal(view(g, 'p2').scene!.myChoiceId, null)
+  assert.match(view(g, 'p2').scene!.text, /살피는 중이다/, '기다리는 사람에게는 "맡은 사람이 살피는 중"이라고 알린다')
+  g = solos(g, 'p1', 'scrawl-1-good', 'scrawl-2-good-0')
+  assert.equal(g.run.phase, 'result', '모두 끝나면 결과가 한 번 나온다')
+  assert.equal(g.run.held, undefined, '보관한 결과는 합쳐진 뒤 비워진다')
+  const r = view(g, 'p1').result!
+  assert.equal(r.kind, 'split')
+  assert.equal(r.label, '조사')
+  assert.deepEqual(r.picks, { p1: 'panel', p2: 'lift-wait' }, '누가 무엇을 골랐는지는 조사의 것이다')
+  assert.match(r.mine!.text, /낙서/, '조사에서 본 것(도입)이 앞에 오고')
+  assert.ok(r.mine!.text.split('\n').length >= 2, '파고들기에서 본 것이 뒤에 이어진다')
+  assert.ok(r.changes.some((c) => c.kind === 'fact'), '새 단서가 같은 결과에 나온다')
+  g = settle(g)
+  assert.equal(g.run.nodeId, 'lift-think', '결과를 읽으면 추리로 간다')
+
+  // 단계형 조사를 아무도 고르지 않으면 파고들기도 합치기도 없이 평소처럼 조사 결과가 나온다
+  const plain = pickEach(toProbe(), { 0: 'ceiling' }, 'lift-wait')
+  assert.equal(plain.run.phase, 'result')
+  assert.equal(plain.run.held, undefined)
+  console.log('통과: 조사 결과는 파고들기 뒤 한 번만 나온다')
 }

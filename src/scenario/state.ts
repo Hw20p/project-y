@@ -115,6 +115,11 @@ export interface RunState {
   personal: Record<string, PersonalProgress>
   /** 다음 장면에 들어갈 때 적용될 효과들 (`later`) */
   pending: PendingEffects[]
+  /**
+   * 보관해 둔 분할 장면의 결과(`SplitNode.holdResult`). 효과는 이미 적용됐고, 이어지는 개인 장면이 끝나면 그 결과와 합쳐서 한 번에 보인다.
+   * 개인 장면이 아닌 곳으로 가면 버린다.
+   */
+  held?: ScenarioResult
   /** 이 장면에 들어오며 적용된 변화 — 지난 선택의 여파와 이 장면의 진입 효과 */
   aftermath: Change[]
   /** story·result에서 "계속"을 누른 사람들 */
@@ -132,8 +137,6 @@ export interface ScenarioGame {
   /** 몇 번째 판인지 (1부터). 다시 도전할 때마다 늘어난다. */
   runNo: number
   run: RunState
-  /** 단서 노트: 플레이어 id → 지금까지 알아낸 사실 (판이 바뀌어도 남는다) */
-  notebooks: Record<string, string[]>
   /** 닿아 본 엔딩: 엔딩 id → 닿은 횟수 */
   endings: Record<string, number>
 }

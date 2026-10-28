@@ -38,10 +38,10 @@ export const night: Scenario = {
           result: '숨을 골랐다. 마음이 가라앉았다.',
         },
         {
-          id: 'lucky',
+          id: 'drawer',
           text: '서랍을 뒤진다',
-          when: { stat: 'luck', min: 3, by: 'actor' },
-          locked: '운이 따라야 찾을 수 있을 것 같다',
+          when: { stat: 'body', min: 2, by: 'actor' },
+          locked: '서랍이 뻑뻑하다. 힘이 있어야 열 수 있을 것 같다',
           effects: [{ give: 'lamp', to: 'actor' }],
           result: '서랍 안쪽에서 손전등을 찾았다.',
         },

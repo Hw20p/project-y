@@ -54,6 +54,11 @@ export interface TaskProbe {
   /** true면 부상자는 이 조사를 할 수 없다 (몸을 쓰는 조사) */
   needsHealthy?: boolean
   /**
+   * 스텟 기준선 같은 자격 조건. 이 조사가 열려 있는데(단계·살피지 않음·`when`) 자격이 안 되는 사람에게는 `locked` 문구와 함께 잠긴 채 보인다.
+   * 필수 길이 아니라 시간을 아끼는 지름길에 쓴다 (같은 단서를 더 높은 단계 조사가 주므로, 자격이 없어도 과제는 풀린다).
+   */
+  gate?: { cond: Cond; locked: string }
+  /**
    * 있으면 단계형 조사다: `findings`는 조사를 고른 직후 읽는 도입(단서 없이 분위기만)이고, 단서는 `dig`의 단계에서 얻는다.
    * 둘이 함께 하는 조사(`min`)와는 쓸 수 없다.
    */
@@ -92,7 +97,7 @@ export interface TaskDef {
   intro: Text
   /** 조사 장면의 글 (기본 문구가 있다) */
   probeText?: Text
-  /** 단계형 조사(`TaskProbe.dig`)를 한 사람이 혼자 이어서 살필 때 모두에게 보이는 장면의 글 (기본 문구가 있다) */
+  /** 단계형 조사(`TaskProbe.dig`)를 한 사람이 혼자 이어서 살필 때의 장면의 글 (조사를 맡은 사람은 고르는 화면 없이 바로 첫 단계로 가므로 이 글은 기다리는 사람에게만 보인다) */
   digText?: Text
   probes: TaskProbe[]
   /** 아무것도 살피지 않고 기다리는 선택지 (조사 칸이 모자란 인원이 고른다) */
@@ -396,6 +401,7 @@ export function buildTasks(spec: TasksSpec): TasksBuilt {
             ...(p.min !== undefined ? { min: p.min } : {}),
             // `locked`는 두지 않는다: 두면 아직 안 열린 단계의 조사가 처음부터 잠긴 채 보인다 (부상 문구는 엔진의 기본값을 쓴다)
             ...(p.needsHealthy ? { needsHealthy: true } : {}),
+            ...(p.gate ? { gate: p.gate } : {}),
             when: conds.length === 1 ? conds[0] : ({ all: conds } as Cond),
           }
         }),
@@ -404,7 +410,9 @@ export function buildTasks(spec: TasksSpec): TasksBuilt {
       private: task.probes.flatMap((p) =>
         withRisk(task, p).map((f): PrivateFinding => ({ ...f, action: p.id, effects: [...(f.effects ?? []), { flag: seenFlag(t, p.id) }] })),
       ),
-      // 단계형 조사를 고른 사람이 있으면 먼저 파고들기로 간다 (그 사람만 혼자 단계를 진행하고, 끝나면 추리로 간다)
+      // 단계형 조사를 고른 사람이 있으면 먼저 파고들기로 간다 (그 사람만 혼자 단계를 진행하고, 끝나면 추리로 간다).
+      // 조사 결과는 파고들기가 끝날 때까지 미뤄서 파고들기의 결과와 한 번에 보인다 (결과 화면이 두 번 나오지 않게).
+      ...(dug.length > 0 ? { holdResult: true } : {}),
       outcomes: dug.length > 0 ? [{ when: { any: dug.map((p): Cond => ({ picked: p.id })) }, next: dig }, { next: think }] : [{ next: think }],
     })
 
@@ -414,7 +422,7 @@ export function buildTasks(spec: TasksSpec): TasksBuilt {
         id: dig,
         kind: 'personal',
         title: `${task.title} · 조사`,
-        text: task.digText ?? '조사를 맡은 사람은 혼자 이어서 살핀다. 나머지는 끝나기를 기다린다.',
+        text: task.digText ?? '조사를 맡은 사람이 이어서 살피는 중이다. 끝나면 모두의 조사 결과가 나온다.',
         quiet: true,
         options: dug.map((p): PersonalOption => ({ id: `dig-${p.id}`, text: p.text, when: { did: p.id }, auto: true, then: p.dig!.steps[0].id })),
         steps: dug.flatMap((p) => p.dig!.steps),
