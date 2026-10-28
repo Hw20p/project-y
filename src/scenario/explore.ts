@@ -287,6 +287,7 @@ function stateKey(g: ScenarioGame, rel: Relevance): string {
       .join('|'),
     entries(r.votes),
     entries(r.picks),
+    entries(r.lastSplit ?? {}), // 조사 뒤의 파고들기가 누가 무엇을 골랐는지 본다
     Object.entries(r.personal)
       .sort(([a], [b]) => (a < b ? -1 : 1))
       .map(([id, p]) => `${id}:${p.pick}:${p.committed ? 1 : 0}:${p.step}:${p.done ? 1 : 0}:${JSON.stringify(p.later)}`)

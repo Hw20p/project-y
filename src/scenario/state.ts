@@ -103,6 +103,8 @@ export interface RunState {
   /** 지금이 낮인지 밤인지 (장면의 `period`를 따라가고, 정해 두지 않은 장면은 앞의 것을 이어받는다) */
   period: 'day' | 'night'
   flags: string[]
+  /** 직전 분할 장면에서 사람마다 고른 행동 (플레이어 id → 행동 id). 다음 개인 장면까지만 남는다. `did` 조건이 본다. */
+  lastSplit?: Record<string, string>
   players: RunPlayer[]
   phase: RunPhase
   /** vote: 플레이어 id → 선택지 id */

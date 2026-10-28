@@ -26,6 +26,9 @@ const voteAll = (g: ScenarioGame, choiceId: string) => ids(g).reduce((s, id) => 
 const pickEach = (g: ScenarioGame, picks: Record<number, string>, fallback: string) =>
   ids(g).reduce((s, id, i) => act(s, { type: 'pick', playerId: id, actionId: picks[i] ?? fallback }), g)
 const view = (g: ScenarioGame, id = 'p1') => viewForScenario(sc, g, id)
+/** 파고들기(조사 뒤에 혼자 이어지는 단계)에서 한 사람이 선택지를 차례로 고른다 ('ready'는 선택지 없는 단계를 읽고 계속) */
+const solos = (g: ScenarioGame, playerId: string, ...choices: string[]): ScenarioGame =>
+  choices.reduce((s, c) => (c === 'ready' ? act(s, { type: 'ready', playerId }) : act(s, { type: 'solo', playerId, choiceId: c })), g)
 
 /** 사실이 적힌 쪽지가 "차갑다"고 말하는 소파 (따뜻한 자리 a → 가운데 b, b → 오른쪽 c, c → 왼쪽 a) */
 const COLD_SAID: Record<SeatId, SeatId> = { a: 'b', b: 'c', c: 'a' }
@@ -178,7 +181,11 @@ const endingOf = (g: ScenarioGame) => toEnd(g).run.endingId
       g = node === 'first-look' ? settle(pickEach(g, {}, 'desk')) : ready(g)
     }
     assert.equal(g.run.nodeId, 'stairs-probe')
-    g = pickEach(g, { 0: 'feel', 1: 'half' }, 'stairs-wait')
+    g = settle(pickEach(g, { 0: 'feel', 1: 'half' }, 'stairs-wait'))
+    // 둘 다 단계형 조사라서, 각자 맞게 두 번 고르고 나서야 단서가 나온다 (판마다 다른 단서는 기둥 수에 맞는 하나만 보인다)
+    assert.equal(g.run.nodeId, 'stairs-dig')
+    const k = STAIRS.indexOf(n)
+    g = settle(solos(solos(g, 'p1', 'feel-1-good', `feel-2-good-${k}`), 'p2', 'half-1-good', `half-2-good-${k}`))
     const learned = new Set(g.run.players.flatMap((p) => p.facts))
     for (const c of STAIR_CLUES[n]) assert.ok(learned.has(c.id), `${n}: ${c.id}`)
     const clues = view(g).clues.map((c) => c.id).filter((id) => id !== 'book-date').sort() // 첫 인상에서 얻은 방명록 단서는 뺀다
@@ -192,8 +199,10 @@ const endingOf = (g: ScenarioGame) => toEnd(g).run.endingId
   let g = start(2, 'lift>sofa>stairs', 'b', 11)
   for (const node of ['arrive', 'first-look', 'lift-intro']) g = node === 'first-look' ? settle(pickEach(g, {}, 'desk')) : ready(g)
   assert.deepEqual(view(g).scene!.choices.map((c) => c.id), ['panel', 'glance', 'buttons', 'ceiling', 'keyring', 'lift-wait'], '처음에는 1단계 조사만 (알아낼 것이 없는 곳·아이템을 얻는 곳 포함)')
-  g = pickEach(g, { 0: 'panel', 1: 'glance' }, 'lift-wait')
-  g = settle(g)
+  // 낙서와 곁눈질은 단계형 조사다: 도입을 읽고, 각자 혼자 두 번 맞게 고르고, 결과를 읽어야 추리로 간다
+  g = settle(pickEach(g, { 0: 'panel', 1: 'glance' }, 'lift-wait'))
+  assert.equal(g.run.nodeId, 'lift-dig')
+  g = settle(solos(solos(g, 'p1', 'scrawl-1-good', 'scrawl-2-good-0'), 'p2', 'glance-1-good', 'glance-2-good-0'))
   assert.equal(g.run.nodeId, 'lift-think')
   const sanity = g.run.players[0].stats.sanity
   g = voteAll(voteAll(g, 'lift-reason'), 'press-up') // 추리를 시작했지만 첫 단계에서 틀렸다
@@ -322,7 +331,9 @@ const endingOf = (g: ScenarioGame) => toEnd(g).run.endingId
 {
   let g = start(2, 'sofa>lift>stairs', 'a', 9)
   for (const node of ['arrive', 'first-look', 'sofa-intro']) g = node === 'first-look' ? settle(pickEach(g, {}, 'desk')) : ready(g)
-  g = pickEach(g, { 0: 'memo-desk', 1: 'memo-book' }, 'sofa-wait')
+  // 쪽지 읽기는 단계형이라, 각자 두 번 맞게 고르고 나서야 단서가 나온다 (따뜻한 자리가 a이므로 맞는 단서는 첫째 것)
+  g = settle(pickEach(g, { 0: 'memo-desk', 1: 'memo-book' }, 'sofa-wait'))
+  g = settle(solos(solos(g, 'p1', 'memo-desk-1-good', 'memo-desk-2-good-0'), 'p2', 'memo-book-1-good', 'memo-book-2-good-0'))
   const seen = view(g, 'p2').clues.filter((c) => c.id.startsWith('note-')) // 첫 인상에서 얻은 방명록 단서는 뺀다
   assert.deepEqual(seen.map((c) => [c.id, c.by.map((b) => b.id)]), [
     ['note-a-desk', ['p1']],
@@ -379,7 +390,7 @@ const endingOf = (g: ScenarioGame) => toEnd(g).run.endingId
   // 손전등을 얻은 사람은 정확하게 센다
   const lit = settle(pickEach(st, {}, 'rest'))
   assert.ok(choiceIds(lit, 'p1').includes('torch') && !choiceIds(lit, 'p2').includes('torch'))
-  const counted = settle(pickEach(lit, { 0: 'torch' }, 'stairs-wait'))
+  const counted = settle(solos(settle(pickEach(lit, { 0: 'torch' }, 'stairs-wait')), 'p1', 'torch-1-good', `torch-2-good-${STAIRS.indexOf(13)}`)) // 손전등 세기는 단계형 조사다
   assert.ok(view(counted).clues.some((c) => c.id === 'torch-13'))
 
   // 과제를 푼 뒤의 밤에는 단서 선택지 없이 스텟 선택지뿐이다
@@ -430,17 +441,19 @@ const endingOf = (g: ScenarioGame) => toEnd(g).run.endingId
   g = pickEach(g, { 0: 'panel', 1: 'glance' }, 'lift-wait')
   assert.equal(g.run.players[0].stats.sanity, s0[0] - 3, '위험한 곳을 읽은 사람은 정신력을 잃는다')
   assert.equal(g.run.players[1].stats.sanity, s0[1], '평범한 곳은 대가가 없다')
-  assert.ok(g.run.players[0].facts.includes('lift-panel-press'), '위험해도 단서는 그대로 얻는다')
   assert.match(view(g, 'p1').result!.mine!.text, /안쪽에서/, '위험한 곳의 이야기가 붙는다')
   assert.doesNotMatch(view(g, 'p2').result!.mine!.text, /안쪽에서/, '평범한 곳에는 붙지 않는다')
+  // 대가와 이야기는 조사를 고른 직후에 붙고, 단서는 파고들기를 맞게 마친 뒤에 나온다
+  g = settle(solos(solos(settle(g), 'p1', 'scrawl-1-good', 'scrawl-2-good-0'), 'p2', 'glance-1-good', 'glance-2-good-0'))
+  assert.ok(g.run.players[0].facts.includes('lift-panel-press'), '위험해도 단서는 그대로 얻는다')
 
   // 소파: 쪽지 틈이 위험한 곳이면 다친다. 다친 사람은 몸을 쓰는 조사(소파 틈·만져 보기)를 못 하지만 읽는 조사는 한다.
   let s = start(2, 'sofa>lift>stairs', 'a', 9, { 'risk-sofa': 'memo-sofa' })
   for (const node of ['arrive', 'first-look', 'sofa-intro']) s = node === 'first-look' ? settle(pickEach(s, {}, 'desk')) : ready(s)
   s = pickEach(s, { 0: 'memo-sofa', 1: 'notice' }, 'sofa-wait')
   assert.deepEqual(s.run.players.map((p) => p.hurt), [true, false])
-  assert.ok(s.run.players[0].facts.includes('note-a-sofa'))
-  s = settle(s)
+  s = settle(solos(solos(settle(s), 'p1', 'memo-sofa-1-good', 'memo-sofa-2-good-0'), 'p2', 'notice-1-good', 'notice-2-good-0'))
+  assert.ok(s.run.players[0].facts.includes('note-a-sofa'), '다쳐도 단서는 그대로 얻는다')
   s = voteAll(s, 'sofa-pass') // 패스: 하루가 지나고 밤이 온다
   s = settle(pickEach(settle(s), {}, 'rest')) // 쉬면서 부상이 낫는다
   assert.equal(s.run.nodeId, 'sofa-probe')
@@ -564,13 +577,14 @@ const endingOf = (g: ScenarioGame) => toEnd(g).run.endingId
   }
   const before = lift({}).run.players.map((p) => p.facts.length) // 아무것도 살피지 않았을 때(첫 인상에서 얻은 단서만 있다)
   // 알아낼 것이 없는 곳(천장)과 낙서의 다른 길(손때)
-  const g = lift({ 0: 'ceiling', 1: 'buttons' })
-  assert.match(view(g, 'p1').result!.mine!.text, /알아낼 만한 것은 없었다/)
+  const g0 = lift({ 0: 'ceiling', 1: 'buttons' })
+  assert.match(view(g0, 'p1').result!.mine!.text, /알아낼 만한 것은 없었다/)
+  const g = settle(solos(settle(g0), 'p2', 'grime-1-good', 'grime-2-good-0')) // 손때는 단계형 조사다
   assert.ok(!g.run.players[0].facts.includes('lift-panel-press'), '천장에서는 단서가 나오지 않는다')
   assert.ok(g.run.players[1].facts.includes('lift-panel-press'), '손때에서도 낙서와 같은 단서가 나온다')
   assert.equal(g.run.players[0].facts.length, before[0], '허탕인 곳은 단서를 더하지 않는다')
   // 같은 단서를 두 길로 얻어도 단서는 하나로 합쳐진다
-  const both = lift({ 0: 'panel', 1: 'buttons' })
+  const both = settle(solos(solos(settle(lift({ 0: 'panel', 1: 'buttons' })), 'p1', 'scrawl-1-good', 'scrawl-2-good-0'), 'p2', 'grime-1-good', 'grime-2-good-0'))
   assert.equal(view(both).clues.filter((c) => c.id === 'lift-panel-press').length, 1)
   // 소파·계단에도 알아낼 것이 없는 곳이 있다
   for (const [order, task, pick] of [['sofa>lift>stairs', 'sofa', 'frame'], ['stairs>lift>sofa', 'stairs', 'handrail']] as const) {
@@ -588,4 +602,57 @@ const endingOf = (g: ScenarioGame) => toEnd(g).run.endingId
   assert.equal(view(lift({ 0: 'ceiling' })).result!.label, '조사')
   assert.equal(view(atLift(2, 'lift>sofa>stairs', 'a', 9)).scene!.label, undefined, '엘리베이터 앞은 조합이다')
   console.log('통과: 조사 — 알아낼 것이 없는 곳과 같은 단서에 이르는 다른 길')
+}
+
+// 18) 단계형 조사(B7): 엘리베이터 패널·소파 돋보기·계단 벽의 눈금 — 맞게 두 번 고르면 단서가 나오고(판마다 값이 다르다), 어긋나면 얻지 못하고 정신력만 잃는다
+{
+  const toTask = (order: string, task: (typeof TASKS)[number], seat: SeatId, stairs: StairsCount, mutate: (g: ScenarioGame) => void) => {
+    let g = start(2, order, seat, stairs)
+    for (const node of ['arrive', 'first-look', `${task}-intro`]) g = node === 'first-look' ? settle(pickEach(g, {}, 'desk')) : ready(g)
+    g = structuredClone(g)
+    mutate(g)
+    return g
+  }
+  /** p1이 조사를 고르고 파고들기에서 `choices`를 차례로 고른다 ('ready'는 선택지 없이 읽고 계속). 끝나면 추리 장면이다. */
+  const digAs = (g: ScenarioGame, task: string, probe: string, ...choices: string[]) => {
+    let s = settle(pickEach(g, { 0: probe }, `${task}-wait`))
+    assert.equal(s.run.nodeId, `${task}-dig`, `${probe}: 단계형 조사는 파고들기로 이어진다`)
+    for (const c of choices) s = c === 'ready' ? act(s, { type: 'ready', playerId: 'p1' }) : act(s, { type: 'solo', playerId: 'p1', choiceId: c })
+    return settle(s)
+  }
+
+  // 엘리베이터 패널(열쇠): 판마다 같은 단서
+  const keyed = toTask('lift>sofa>stairs', 'lift', 'a', 9, (g) => void g.run.players[0].items.push('key'))
+  const opened = digAs(keyed, 'lift', 'panel-open', 'panel-1-good', 'panel-2-good-0')
+  assert.equal(opened.run.nodeId, 'lift-think')
+  assert.ok(opened.run.players[0].facts.includes('lift-wiring'))
+  // 어긋나면 단서가 없고 정신력만 잃는다 (첫 단계에서 어긋나면 거기서 끝난다)
+  const s0 = keyed.run.players[0].stats.sanity
+  const failed = digAs(keyed, 'lift', 'panel-open', 'panel-1-bad', 'ready')
+  assert.ok(!failed.run.players[0].facts.includes('lift-wiring'))
+  assert.equal(failed.run.players[0].stats.sanity, s0 - 1)
+  // 눌러 보기(2단계 조사): 두 번 맞게 고르면 되돌아온다는 단서가 나오고 정신력 −1도 따른다
+  const pressed = digAs(toTask('lift>sofa>stairs', 'lift', 'a', 9, (g) => void g.run.flags.push('pass-lift-1')), 'lift', 'press', 'press-1-good', 'press-2-good-0')
+  assert.ok(pressed.run.players[0].facts.includes('lift-press-back'))
+  assert.equal(pressed.run.players[0].stats.sanity, s0 - 1)
+
+  // 소파 돋보기(아이템): 따뜻한 자리마다 다른 단서
+  for (const seat of SEATS) {
+    const g = toTask('sofa>lift>stairs', 'sofa', seat, 9, (x) => void x.run.players[0].items.push('loupe'))
+    const done = digAs(g, 'sofa', 'lens', 'lens-1-good', `lens-2-good-${SEATS.indexOf(seat)}`)
+    assert.ok(done.run.players[0].facts.includes(`lens-${seat}`), `${seat}: 돋보기의 단서`)
+  }
+  // 잉크 비교(2단계 조사)
+  const inked = digAs(toTask('sofa>lift>stairs', 'sofa', 'c', 9, (g) => void g.run.flags.push('pass-sofa-1')), 'sofa', 'ink', 'ink-1-good', 'ink-2-good-2')
+  assert.ok(inked.run.players[0].facts.includes('ink-c'))
+
+  // 계단: 내려가 보기(2단계, 부상 제한)와 벽의 눈금(3단계) — 기둥 수마다 다른 단서
+  for (const stairs of STAIRS) {
+    const k = STAIRS.indexOf(stairs)
+    const w = digAs(toTask('stairs>lift>sofa', 'stairs', 'a', stairs, (g) => void g.run.flags.push('pass-stairs-1', 'pass-stairs-2')), 'stairs', 'wall', 'wall-1-good', `wall-2-good-${k}`)
+    assert.ok(w.run.players[0].facts.includes(`wall-${stairs}`), `${stairs}: 벽의 눈금`)
+    const walked = digAs(toTask('stairs>lift>sofa', 'stairs', 'a', stairs, (g) => void g.run.flags.push('pass-stairs-1')), 'stairs', 'walk', 'walk-1-good', `walk-2-good-${k}`)
+    assert.ok(walked.run.players[0].facts.includes(`walk-${stairs}`), `${stairs}: 내려가 본 칸 수`)
+  }
+  console.log('통과: 단계형 조사(B7) — 패널·눌러 보기·돋보기·잉크·내려가 보기·벽의 눈금')
 }

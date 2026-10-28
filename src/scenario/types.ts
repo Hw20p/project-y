@@ -76,6 +76,8 @@ export type Cond =
   | { party: { min?: number; max?: number } }
   | { var: string; is: string | number }
   | { picked: string; count?: { min?: number; max?: number } }
+  /** 직전 분할 장면(조사)에서 이 사람이 그 행동을 골랐는지. 조사 다음에 이어지는 개인 장면(파고들기)의 선택지에서만 쓴다. */
+  | { did: string }
   | { not: Cond }
   | { all: Cond[] }
   | { any: Cond[] }
@@ -273,6 +275,11 @@ export interface PersonalOption {
   later?: Effect[]
   /** 이어지는 개인 단계. 완전히 개인만 볼 수 있는 선택지·발견이 이어진다. 없으면 바로 끝. */
   then?: string
+  /**
+   * true면 이 사람에게 열린 선택지가 이것 하나뿐일 때 장면에 들어오는 순간 저절로 고른 것이 된다 (고르는 화면 없이 바로 `then`의 첫 단계로 간다).
+   * 조사 뒤에 이어지는 파고들기처럼, 이미 고른 것을 한 번 더 고르게 하지 않으려고 쓴다.
+   */
+  auto?: boolean
 }
 
 /**
@@ -285,6 +292,8 @@ export interface PersonalNode extends NodeBase {
   text: Text
   options: PersonalOption[]
   steps?: PersonalStep[]
+  /** true면 열린 선택지가 없는 사람은 "할 수 있는 일이 없었다"는 글 없이 조용히 끝난다 (정신을 잃은 경우는 그대로 알린다) */
+  quiet?: boolean
   next: Route
 }
 

@@ -53,6 +53,10 @@ export function evalCond(cond: Cond, ctx: EvalCtx): boolean {
     const min = cond.count?.min ?? 1
     return n >= min && (cond.count?.max === undefined || n <= cond.count.max)
   }
+  if ('did' in cond) {
+    const who = ctx.actor ?? ctx.viewer
+    return !!who && ctx.run.lastSplit?.[who] === cond.did
+  }
   if ('not' in cond) return !evalCond(cond.not, ctx)
   if ('all' in cond) return cond.all.every((c) => evalCond(c, ctx))
   return cond.any.some((c) => evalCond(c, ctx))

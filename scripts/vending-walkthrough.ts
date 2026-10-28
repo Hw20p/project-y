@@ -47,6 +47,29 @@ const toEnd = (g: ScenarioGame) => {
 const rightAnswer = (task: (typeof TASKS)[number], r: Run) =>
   task === 'item' ? 'item-reason' : task === 'button' ? `btn-${r.button}` : 'leave'
 
+/**
+ * 사람 한 명이 파고들기(조사 뒤에 혼자 이어지는 단계)에서 선택지를 고른다.
+ * 판마다 단서가 달라 id 끝이 다른 맞는 보기는 `<조사>-2-good`으로 쓰면 지금 보이는 것을 고른다.
+ */
+const soloAs = (g: ScenarioGame, playerId: string, choiceId: string): ScenarioGame => {
+  if (choiceId.endsWith('-2-good')) {
+    const seen = viewForScenario(sc, g, playerId).scene!.solo!.choices.filter((c) => c.id.startsWith(choiceId))
+    assert.equal(seen.length, 1, `${choiceId}: 보이는 맞는 보기는 하나다`)
+    choiceId = seen[0].id
+  }
+  return act(g, { type: 'solo', playerId, choiceId })
+}
+/**
+ * 단계형 조사(낙서 읽기)를 끝까지 진행한다: 조사 결과(도입)를 읽고 → 파고들기에서 `who`가 `choices`를 차례로 고르고 → 결과를 읽는다.
+ * 끝나면 추리 장면이다.
+ */
+const digThrough = (g: ScenarioGame, who: string, ...choices: string[]): ScenarioGame => {
+  g = settle(g)
+  assert.equal(g.run.nodeId, 'item-dig', '단계형 조사를 고른 사람이 있으면 파고들기로 간다')
+  for (const c of choices) g = soloAs(g, who, c)
+  return settle(g)
+}
+
 /** 받는 것의 추리 사슬에서 단계마다 맞는 보기: 규칙 → 도는 방향 → 어제 → 오늘 */
 const chainRight = (r: Run) => ['rule-cycle', 'dir-up', `yd-${yesterdayOf(r.price)}`, `item-${r.price}`]
 
@@ -187,7 +210,7 @@ function trade(g: ScenarioGame, put: string, press: string, change: string): Sce
   // 받는 것: 혼자는 1단계에서 하나씩만 얻는다 → 한 번 넘기면 2단계에 혼자 쓰는 조사가 열린다
   let solo = toProbe(1, 'item')
   assert.deepEqual(choiceIds(solo), ['graffiti', 'receipt', 'trash', 'display', 'cabinet', 'item-wait'], '처음에는 1단계 조사만 (알아낼 것이 없는 곳·아이템을 얻는 곳 포함)')
-  solo = settle(pickEach(solo, {}, 'graffiti'))
+  solo = digThrough(pickEach(solo, {}, 'graffiti'), 'p1', 'graffiti-1-date', 'graffiti-2a-order')
   assert.equal(solo.run.nodeId, 'item-think')
   solo = settle(voteAll(solo, 'item-pass'))
   assert.equal(solo.run.time, 1)
@@ -329,7 +352,9 @@ function trade(g: ScenarioGame, put: string, press: string, change: string): Sce
   const r: Run = { ...RUN, order: 'button>item>change' }
   let g = start(2, r)
   for (const node of ['arrive', 'first-look', 'button-intro']) g = node === 'first-look' ? settle(pickEach(g, {}, 'pocket')) : ready(g)
-  g = pickEach(g, { 0: 'notice', 1: 'ear' }, 'button-wait')
+  // 안내문·귀 대기는 단계형이라, 각자 두 번 맞게 고르고 나서야 단서가 나온다
+  g = settle(pickEach(g, { 0: 'notice', 1: 'ear' }, 'button-wait'))
+  g = settle(soloAs(soloAs(soloAs(soloAs(g, 'p1', 'notice-1-good'), 'p1', 'notice-2-good'), 'p2', 'ear-1-good'), 'p2', 'ear-2-good'))
   const seen = view(g, 'p2').clues.map((c) => [c.id, c.by.map((b) => b.id)])
   assert.deepEqual(seen, [
     ['wire-rule', ['p1']],
@@ -360,7 +385,7 @@ function trade(g: ScenarioGame, put: string, press: string, change: string): Sce
   assert.deepEqual(view(g, 'p2').clues.filter((c) => c.id === 'night-last-coin').map((c) => c.by.map((b) => b.id)), [['p1']])
   assert.ok(choiceIds(g, 'p2').includes('lit') && !choiceIds(g, 'p1').includes('lit'), '플래시를 가진 사람에게만 낮의 조사도 열린다')
   assert.ok(!choiceIds(g, 'p1').includes('cabinet') && !choiceIds(g, 'p2').includes('cabinet'), '누가 플래시를 가졌으면 서랍은 보이지 않는다')
-  const lit = settle(pickEach(g, { 1: 'lit' }, 'item-wait'))
+  const lit = digThrough(pickEach(g, { 1: 'lit' }, 'item-wait'), 'p2', 'lit-1-good', 'lit-2-good-0') // 플래시 비추기는 단계형 조사다
   assert.ok(view(lit).clues.some((c) => c.id === 'today-coin' && c.by.some((b) => b.id === 'p2')))
 
   // 과제를 푼 뒤의 휴식에는 스텟 선택지뿐이다
@@ -376,8 +401,10 @@ function trade(g: ScenarioGame, put: string, press: string, change: string): Sce
   for (const node of ['arrive', 'first-look', 'item-intro']) g = node === 'first-look' ? settle(pickEach(g, {}, 'pocket')) : ready(g)
   g = pickEach(g, { 0: 'receipt', 1: 'graffiti' }, 'item-wait')
   assert.deepEqual(g.run.players.map((p) => p.hurt), [true, false])
-  assert.ok(g.run.players[0].facts.includes('yday-coin'))
   assert.match(view(g, 'p1').result!.mine!.text, /글자가 잉크처럼 번져/)
+  // 영수증·낙서는 단계형 조사라, 단서는 파고들기를 맞게 마친 뒤에 나온다
+  g = settle(soloAs(soloAs(soloAs(soloAs(settle(g), 'p1', 'receipt-1-good'), 'p1', 'receipt-2-good'), 'p2', 'graffiti-1-date'), 'p2', 'graffiti-2a-order'))
+  assert.ok(g.run.players[0].facts.includes('yday-coin'), '다쳐도 어제 거래는 알아낸다')
 
   // 거스름돈: 위험한 곳은 정신력 −3 (낙서를 읽은 사람만)
   let c = start(2, { ...RUN, order: 'change>item>button' }, { 'risk-change': 'wall' })
@@ -388,7 +415,9 @@ function trade(g: ScenarioGame, put: string, press: string, change: string): Sce
   assert.equal(c.run.players[1].stats.sanity, s0[1])
 
   // 거스름돈의 답에 "막는다"가 더해졌고, 틀린 답이며 모두가 알게 된다
-  const cover = voteAll(settle(c), 'cover')
+  c = settle(soloAs(soloAs(soloAs(soloAs(settle(c), 'p1', 'wall-1-good'), 'p1', 'wall-2-good-0'), 'p2', 'tray-paper-1-good'), 'p2', 'tray-paper-2-good-0')) // 낙서·종이도 단계형이다
+  assert.equal(c.run.nodeId, 'change-think')
+  const cover = voteAll(c, 'cover')
   assert.ok(cover.run.players.every((p) => p.facts.includes('change-no-cover')))
   console.log('통과: 위험한 곳(자판기)과 거스름돈의 새 오답')
 }
@@ -398,10 +427,18 @@ function trade(g: ScenarioGame, put: string, press: string, change: string): Sce
   const r: Run = { ...RUN, order: 'item>button>change' } // 오늘 받는 것은 낡은 동전, 어제는 사원증
   const text = (g: ScenarioGame) => view(g).scene!.text
   /** 받는 것의 조사를 마치고 추리 장면에 선 상태 */
-  const atThink = (picks: Record<number, string>) => {
+  const atThink = (picks: Record<number, string>, dig: Record<string, string[]> = {}) => {
     let g = start(2, r)
     for (const node of ['arrive', 'first-look', 'item-intro']) g = node === 'first-look' ? settle(pickEach(g, {}, 'pocket')) : ready(g)
-    return settle(pickEach(g, picks, 'item-wait'))
+    g = settle(pickEach(g, picks, 'item-wait'))
+    // 낙서·영수증 읽기는 단계형이라, 고른 사람이 파고들기에서 `dig`(조사 id → 선택)를 차례로 하고 나서야 추리 장면이 된다
+    const diggers = Object.entries(picks).filter(([, a]) => a in dig)
+    if (diggers.length > 0) {
+      assert.equal(g.run.nodeId, 'item-dig')
+      for (const [i, a] of diggers) for (const c of dig[a]) g = soloAs(g, g.run.players[Number(i)].id, c)
+      g = settle(g)
+    }
+    return g
   }
 
   // 추리 장면에는 둘뿐이고, 시작하면 4단계 사슬이 이어진다
@@ -421,7 +458,7 @@ function trade(g: ScenarioGame, put: string, press: string, change: string): Sce
   assert.equal(g.run.time, 0)
 
   // 단서를 얻었으면 그 단서가 근거로 밝혀지고, 끝까지 맞으면 풀린다
-  const informed = atThink({ 0: 'graffiti', 1: 'receipt' })
+  const informed = atThink({ 0: 'graffiti', 1: 'receipt' }, { graffiti: ['graffiti-1-date', 'graffiti-2a-order'], receipt: ['receipt-1-good', 'receipt-2-good'] })
   assert.equal(informed.run.nodeId, 'item-think')
   let h = voteAll(voteAll(informed, 'item-reason'), 'rule-cycle')
   assert.match(text(h), /낙서가 근거였다/)
@@ -479,11 +516,11 @@ function trade(g: ScenarioGame, put: string, press: string, change: string): Sce
     for (const node of ['arrive', 'first-look', 'item-intro']) g = node === 'first-look' ? settle(pickEach(g, {}, 'pocket')) : ready(g)
     return pickEach(g, picks, 'item-wait')
   }
-  const g = toProbe({ 0: 'display', 1: 'trash' })
-  assert.match(view(g, 'p1').result!.mine!.text, /의미를 읽어 낼 수 없었다/)
+  const g0 = toProbe({ 0: 'display', 1: 'trash' })
+  assert.match(view(g0, 'p1').result!.mine!.text, /의미를 읽어 낼 수 없었다/)
+  const g = settle(soloAs(soloAs(settle(g0), 'p2', 'trash-1-good'), 'p2', 'trash-2-good')) // 휴지통 종이는 단계형 조사다
   assert.ok(!g.run.players[0].facts.some((f) => f.startsWith('yday-')), '표시등에서는 단서가 나오지 않는다')
   assert.ok(g.run.players[1].facts.includes('yday-coin'), '휴지통의 종이에서도 어제의 거래가 나온다')
-  assert.match(view(g, 'p2').result!.mine!.text, /어제: 사원증/)
   console.log('통과: 자판기 조사 — 알아낼 것이 없는 곳과 같은 단서에 이르는 다른 길')
 }
 
@@ -512,4 +549,98 @@ function trade(g: ScenarioGame, put: string, press: string, change: string): Sce
   const cn = settle(pickEach(c, { 1: 'tongs-night' }, 'coffee'))
   assert.ok(cn.run.players[1].facts.includes('change-moved'))
   console.log('통과: 아이템은 낮의 조사에서만 얻고 밤에는 쓰기만 한다 (장갑·집게)')
+}
+
+// 16) 단계형 조사(낙서 읽기): 고른 사람만 혼자 단계를 진행하고, 어떻게 고르느냐에 따라 얻는 단서가 달라지며, 결과는 모두 끝난 뒤에 나온다
+{
+  const r: Run = { ...RUN, order: 'item>button>change' }
+  const toProbe = () => {
+    let g = start(2, r)
+    for (const node of ['arrive', 'first-look', 'item-intro']) g = node === 'first-look' ? settle(pickEach(g, {}, 'pocket')) : ready(g)
+    return g
+  }
+  const factsOf = (g: ScenarioGame, i: number) => g.run.players[i].facts
+
+  // 단계형 조사를 고르면 도입을 읽은 뒤 파고들기로 간다. 고른 사람은 고르는 화면 없이 바로 첫 단계에 서고, 나머지는 기다린다.
+  let g = settle(pickEach(toProbe(), { 0: 'graffiti', 1: 'display' }, 'item-wait'))
+  assert.equal(g.run.nodeId, 'item-dig')
+  assert.equal(g.run.phase, 'personal')
+  assert.deepEqual(view(g, 'p1').scene!.solo!.choices.map((c) => c.id), ['graffiti-1-date', 'graffiti-1-big'])
+  assert.equal(view(g, 'p2').scene!.solo, null, '조사하지 않은 사람에게는 단계가 없다')
+  assert.equal(view(g, 'p2').scene!.mineDone, true)
+  assert.ok(!factsOf(g, 0).includes('item-cycle'), '단계를 끝내기 전에는 단서가 없다')
+  // 가장 좋은 길: 날짜 줄 → 방향을 따라간다 → 온전한 단서
+  const best = digThrough(g, 'p1', 'graffiti-1-date', 'graffiti-2a-order')
+  assert.equal(best.run.nodeId, 'item-think')
+  assert.ok(factsOf(best, 0).includes('item-cycle') && !factsOf(best, 0).includes('item-cycle-half'))
+  assert.equal(best.run.lastSplit, undefined, '조사의 선택은 파고들기가 끝나면 남지 않는다')
+  // 날짜 줄 → 줄을 센다: 흐릿한 단서뿐
+  const half = digThrough(g, 'p1', 'graffiti-1-date', 'graffiti-2a-count')
+  assert.ok(factsOf(half, 0).includes('item-cycle-half') && !factsOf(half, 0).includes('item-cycle'))
+  // 큰 글씨부터: 아래쪽을 읽으면 흐릿한 단서, 물러서면 아무것도 못 얻고 정신력만 잃는다
+  assert.ok(factsOf(digThrough(g, 'p1', 'graffiti-1-big', 'graffiti-2b-low'), 0).includes('item-cycle-half'))
+  const s0 = g.run.players[0].stats.sanity
+  const none = digThrough(g, 'p1', 'graffiti-1-big', 'graffiti-2b-leave')
+  assert.ok(!factsOf(none, 0).some((f) => f.startsWith('item-cycle')), '잘못 읽고 물러서면 단서가 없다')
+  assert.equal(none.run.players[0].stats.sanity, s0 - 1)
+  // 결과는 모두 끝난 뒤에 나온다: 파고들기 도중에는 결과 화면이 아니다
+  const mid = soloAs(g, 'p1', 'graffiti-1-date')
+  assert.equal(mid.run.phase, 'personal')
+  assert.equal(view(mid, 'p1').scene!.solo!.choices.length, 2)
+  const done = soloAs(mid, 'p1', 'graffiti-2a-order')
+  assert.equal(done.run.phase, 'result', '모두 끝나야 결과가 나온다')
+  assert.match(view(done, 'p1').result!.mine!.text, /가벼운 것에서 소중한 것으로/)
+  // 조사하지 않은 사람에게는 "할 수 있는 일이 없었다"가 뜨지 않는다
+  assert.doesNotMatch(view(done, 'p2').result!.mine?.text ?? '', /할 수 있는 일이 없었다/)
+
+  // 단계형 조사를 아무도 고르지 않으면 파고들기 없이 바로 추리다
+  assert.equal(settle(pickEach(toProbe(), { 0: 'display' }, 'item-wait')).run.nodeId, 'item-think')
+
+  // 부분 단서도 추리 근거가 된다: 첫 단계(규칙)의 근거 이야기가 달라진다
+  const reasoned = voteAll(voteAll(half, 'item-reason'), 'rule-cycle')
+  assert.match(view(reasoned).scene!.text, /같은 순서로 되풀이되는 것을 읽은 것이 근거였다/)
+  console.log('통과: 단계형 조사 (혼자 단계 진행·고르는 방식에 따라 다른 단서·모두 끝난 뒤 결과)')
+}
+
+// 17) 단계형 조사(자판기): 장부 읽기(3단계 조사)·플래시 비추기·집게로 집기 — 맞게 두 번 고르면 단서가 나오고, 어긋나면 얻지 못하고 정신력만 잃는다
+{
+  const toTask = (order: string, task: 'item' | 'change', mutate: (g: ScenarioGame) => void) => {
+    let g = start(2, { ...RUN, order })
+    for (const node of ['arrive', 'first-look', `${task}-intro`]) g = node === 'first-look' ? settle(pickEach(g, {}, 'pocket')) : ready(g)
+    g = structuredClone(g)
+    mutate(g)
+    return g
+  }
+  const solo = (g: ScenarioGame, ...choices: string[]) => choices.reduce((s, c) => (c === 'ready' ? act(s, { type: 'ready', playerId: 'p1' }) : soloAs(s, 'p1', c)), g)
+  const open3 = (g: ScenarioGame) => g.run.flags.push('pass-item-1', 'pass-item-2') // 오답·패스 두 번 → 3단계 조사가 열린다
+
+  // 장부 읽기(3단계, 오늘 받는 것마다 다른 단서): 오늘 줄을 찾고 작은 글씨를 읽으면 그 판의 단서가 나온다
+  for (const price of ITEMS) {
+    const r: Run = { ...RUN, order: 'item>button>change', price }
+    let g = start(2, r)
+    for (const node of ['arrive', 'first-look', 'item-intro']) g = node === 'first-look' ? settle(pickEach(g, {}, 'pocket')) : ready(g)
+    g = structuredClone(g)
+    open3(g)
+    g = settle(pickEach(g, { 0: 'ledger' }, 'item-wait'))
+    assert.equal(g.run.nodeId, 'item-dig')
+    g = solo(g, 'ledger-1-good')
+    assert.equal(view(g, 'p1').scene!.solo!.choices.length, 2, '맞는 선택지는 판마다 하나만 보인다')
+    g = settle(solo(g, `ledger-2-good-${ITEMS.indexOf(price)}`))
+    assert.ok(g.run.players[0].facts.includes(`ledger-${price}`), `${price}: 장부의 단서`)
+  }
+
+  // 어긋나게 고르면 단서가 없고 정신력만 잃는다 (첫 단계에서 어긋나면 거기서 끝난다)
+  let bad = toTask('item>button>change', 'item', open3)
+  const s0 = bad.run.players[0].stats.sanity
+  bad = settle(solo(settle(pickEach(bad, { 0: 'ledger' }, 'item-wait')), 'ledger-1-bad', 'ready'))
+  assert.equal(bad.run.nodeId, 'item-think')
+  assert.ok(!bad.run.players[0].facts.some((f) => f.startsWith('ledger-')))
+  assert.equal(bad.run.players[0].stats.sanity, s0 - 1)
+
+  // 집게로 집기(아이템 조사, 단서는 판마다 같다)
+  const withTongs = toTask('change>item>button', 'change', (g) => void g.run.players[0].items.push('tongs'))
+  const t = settle(solo(settle(pickEach(withTongs, { 0: 'tongs' }, 'change-wait')), 'tongs-1-good', 'tongs-2-good-0'))
+  assert.equal(t.run.nodeId, 'change-think')
+  assert.ok(t.run.players[0].facts.includes('change-moved'))
+  console.log('통과: 단계형 조사(자판기) — 장부·플래시·집게')
 }

@@ -15,8 +15,8 @@
 // 글은 '나'나 '당신'을 쓰지 않아 혼자일 때도 여럿일 때도 자연스럽다.
 //
 // 판마다 바뀌는 값: price(받는 품목 coin·photo·badge), button(눌러야 할 칸 A·B·C), wires(전선이 이어진 방식 1·2), order(과제 순서).
-import { buildTasks, type ChainStep, type TaskAnswer, type TaskDef, type TaskProbe } from '../../scenario/tasks.ts'
-import type { Cond, Node, PersonalOption, Scenario } from '../../scenario/types.ts'
+import { buildTasks, digTwoStep, type ChainStep, type TaskAnswer, type TaskDef, type TaskProbe } from '../../scenario/tasks.ts'
+import type { Cond, Effect, Node, PersonalOption, Scenario } from '../../scenario/types.ts'
 
 /** 주머니 속 세 가지 (오늘 밤 자판기가 받는 것은 이 중 하나). 순서가 곧 자판기가 받는 순서다. */
 const ITEMS = [
@@ -60,6 +60,14 @@ const sanityLater = (n: number) => [{ stat: 'sanity' as const, add: -n, to: 'act
 /** 오늘 받는 것에 따라 발견이 다르다 (마지막 조각은 조건 없이 둔다) */
 const byPrice = (make: (price: ItemId) => Findings[number]): Findings =>
   ITEM_ORDER.map((p, i) => ({ ...make(p), ...(i < ITEM_ORDER.length - 1 ? { when: priceIs(p) } : {}) }))
+
+/** 단계형 조사에서, 눌러야 할 칸과 전선 방식(여섯 가지)마다 맞게 끝냈을 때 얻는 단서가 다르다 (판마다 하나만 보인다) */
+const wiringClues = (
+  make: (w: ReturnType<typeof wiringOf>) => { result: string; effects: Effect[]; later?: Effect[] },
+): { when: Cond; result: string; effects: Effect[]; later?: Effect[] }[] =>
+  BUTTON_ORDER.flatMap((b) =>
+    (['1', '2'] as const).map((wr) => ({ when: { all: [buttonIs(b), { var: 'wires', is: wr }] } as Cond, ...make(wiringOf(b, wr)) })),
+  )
 
 /** 눌러야 할 칸과 전선 방식에 따라 발견이 다르다 */
 const byWiring = (make: (w: ReturnType<typeof wiringOf>) => Findings[number]): Findings => {
@@ -144,7 +152,14 @@ function itemChain(): ChainStep[] {
           text: '낙서가 근거였다. 날짜 옆에 품목이 한 글자씩, 동전·사진·사원증이 같은 순서로 되풀이되고 있었다. 무작위가 아니다. 자판기는 순서대로 돈다.',
           when: knows('item-cycle'),
         },
-        { text: '이 규칙을 말해 주는 기록은 읽지 못했다. 근거 없이 감이 닿았을 뿐이다. 그래도 자판기는 낮게 ‘응’ 하고 대답하는 것 같았다.', when: no('item-cycle') },
+        {
+          text: '낙서의 품목이 같은 순서로 되풀이되는 것을 읽은 것이 근거였다. 무작위가 아니다. 자판기는 순서대로 돈다.',
+          when: all(knows('item-cycle-half'), no('item-cycle')),
+        },
+        {
+          text: '이 규칙을 말해 주는 기록은 읽지 못했다. 근거 없이 감이 닿았을 뿐이다. 그래도 자판기는 낮게 ‘응’ 하고 대답하는 것 같았다.',
+          when: all(no('item-cycle'), no('item-cycle-half')),
+        },
       ],
     },
     {
@@ -248,35 +263,120 @@ const item: TaskDef = {
     '투입구에는 “무엇이든 넣으세요”라고 적혀 있다. 하지만 아무거나 넣어서는 안 된다는 것쯤은 알 수 있다. 오늘 밤 이 기계가 받는 것은 하나로 정해져 있다.\n주머니에는 낡은 동전, 가족사진, 사원증이 들어 있다. 무엇을 받는지 알아내야 한다.',
   probes: [
     {
+      // 단계형 조사: 고른 직후에는 도입만 읽고, 혼자 두 번 고른 뒤에 단서가 나온다. 어떻게 읽느냐에 따라 얻는 것이 달라진다.
+      //   날짜 줄부터 → 방향을 따라가면 온전한 단서(item-cycle), 줄을 세면 흐릿한 단서(item-cycle-half)
+      //   큰 글씨부터 → 아래쪽 작은 글씨를 읽어야 흐릿한 단서, 물러서면 아무것도 못 얻는다
       id: 'graffiti',
       text: '벽의 낙서를 가까이서 읽는다',
       tier: 1,
       findings: [
         {
-          text: '벽에 전임자들의 낙서가 빼곡하다. 날짜 옆에 품목이 한 글자씩 적혀 있다. 동전, 사진, 사원증, 동전, 사진, 사원증… 같은 순서로 되풀이된다.\n그 아래 누군가 크게 적었다. “자판기는 어제 받은 것의 다음 것을 받는다. 가벼운 것에서 소중한 것으로.”',
-          effects: [learn('item-cycle')],
+          text: '벽에 전임자들의 낙서가 빼곡하다. 날짜와 품목, 이름 모를 글씨가 몇 겹으로 덧써져 있다. 어디부터 읽어야 할지 막막하다.',
         },
       ],
+      dig: {
+        steps: [
+          {
+            id: 'graffiti-1',
+            text: '낙서는 몇 겹으로 덧써져 있다. 한 겹씩 읽어야 한다. 어디부터 읽을까?',
+            choices: [
+              { id: 'graffiti-1-date', text: '날짜가 적힌 줄을 위에서부터 차례로 읽는다', then: 'graffiti-2a' },
+              { id: 'graffiti-1-big', text: '가장 크게 적힌 글씨부터 읽는다', then: 'graffiti-2b' },
+            ],
+          },
+          {
+            id: 'graffiti-2a',
+            text: '날짜 줄마다 품목이 한 글자씩 적혀 있다. 이제 무엇을 확인할까?',
+            choices: [
+              {
+                id: 'graffiti-2a-order',
+                text: '품목이 어떤 순서로 이어지는지, 그 방향을 따라간다',
+                result:
+                  '동전, 사진, 사원증, 동전, 사진, 사원증… 같은 순서로 되풀이된다.\n그 아래 누군가 크게 적었다. “자판기는 어제 받은 것의 다음 것을 받는다. 가벼운 것에서 소중한 것으로.”',
+                effects: [learn('item-cycle')],
+              },
+              {
+                id: 'graffiti-2a-count',
+                text: '날짜 줄이 모두 몇 줄인지 헤아려 본다',
+                result: '줄을 세다 보니 품목이 같은 순서로 되풀이되는 것이 눈에 들어왔다. 하지만 어느 쪽으로 도는지는 끝내 읽어 내지 못했다.',
+                effects: [learn('item-cycle-half')],
+              },
+            ],
+          },
+          {
+            id: 'graffiti-2b',
+            text: '큰 글씨는 읽을수록 흐릿해지고 눈이 아프다. “여기 오지 마”라는 말뿐이다. 벽 아래쪽에는 작은 글씨 줄이 보인다.',
+            choices: [
+              {
+                id: 'graffiti-2b-low',
+                text: '허리를 굽혀 아래쪽의 작은 글씨를 읽는다',
+                result: '아래쪽의 작은 글씨에서 품목이 같은 순서로 되풀이되는 것을 읽었다. 허리가 아파 오래 읽지는 못했다.',
+                effects: [learn('item-cycle-half')],
+              },
+              {
+                id: 'graffiti-2b-leave',
+                text: '더 읽지 않고 물러선다',
+                result: '큰 글씨의 기운에 눌려 더는 읽지 못했다. 알아낸 것은 없다.',
+                later: sanityLater(1),
+              },
+            ],
+          },
+        ],
+      },
     },
     {
       id: 'receipt',
       text: '바닥에 떨어진 영수증 종이를 주워 읽는다',
       tier: 1,
       risk: '영수증을 집어 든 순간 인쇄된 글자가 잉크처럼 번져 손가락을 타고 올라왔다. 털어 내도 손끝이 한참 얼얼했고, 종이는 어느새 새하얗게 비어 있었다.',
-      findings: byPrice((p) => ({
-        text: `바닥의 영수증은 아직 따뜻하다. 맨 윗줄에 어제 날짜의 거래가 한 줄 인쇄되어 있다.\n“어제: ${itemLabel(yesterdayOf(p))}.”`,
-        effects: [learn(`yday-${p}`)],
-      })),
+      findings: [{ text: '바닥에 떨어진 영수증을 주워 읽기로 했다. 종이가 아직 따뜻하다.' }],
+      dig: digTwoStep('receipt', {
+        first: {
+          text: '영수증에는 줄이 여러 개 찍혀 있다. 어디부터 읽을까?',
+          good: '맨 윗줄부터 거래 내역을 차례로 읽는다',
+          bad: '아랫줄의 합계부터 본다',
+          badEnd: '합계는 0이었다. 거래 내역은 읽지 못했다.',
+        },
+        second: {
+          text: '거래 내역이 이어진다. 무엇을 확인할까?',
+          good: '날짜가 어제인지 보고 그 줄의 품목을 읽는다',
+          bad: '가장 큰 글씨만 읽는다',
+          badEnd: '큰 글씨는 상점 이름뿐이었다.',
+          badFirst: true,
+        },
+        clue: ITEM_ORDER.map((p) => ({
+          when: priceIs(p),
+          result: `바닥의 영수증은 아직 따뜻하다. 맨 윗줄에 어제 날짜의 거래가 한 줄 인쇄되어 있다.\n“어제: ${itemLabel(yesterdayOf(p))}.”`,
+          effects: [learn(`yday-${p}`)],
+        })),
+      }),
     },
     {
       // 영수증과 같은 단서에 이르는 다른 길 (대가는 없다). 둘이 나눠 맡으면 같은 것을 두 번 얻는 셈이 된다.
       id: 'trash',
       text: '휴지통 바닥의 구겨진 종이를 편다',
       tier: 1,
-      findings: byPrice((p) => ({
-        text: `구겨진 종이는 누군가 버린 거래 내역이다. 마지막 줄에 품목이 한 줄 찍혀 있다.\n“어제: ${itemLabel(yesterdayOf(p))}.”`,
-        effects: [learn(`yday-${p}`)],
-      })),
+      findings: [{ text: '휴지통 바닥의 구겨진 종이를 펴기로 했다. 잉크가 번져 있다.' }],
+      dig: digTwoStep('trash', {
+        first: {
+          text: '종이가 심하게 구겨져 있다. 어떻게 펼까?',
+          good: '주름을 천천히 펴 가며 읽는다',
+          bad: '주름을 한 번에 확 펴서 읽는다',
+          badEnd: '종이가 찢어져 글씨가 반쪽만 남았다.',
+          badFirst: true,
+        },
+        second: {
+          text: '글씨가 군데군데 남아 있다. 무엇을 찾을까?',
+          good: '남은 줄 가운데 날짜가 있는 줄을 찾는다',
+          bad: '글씨가 큰 줄만 읽는다',
+          badEnd: '큰 글씨는 광고 문구였다.',
+        },
+        clue: ITEM_ORDER.map((p) => ({
+          when: priceIs(p),
+          result: `구겨진 종이는 누군가 버린 거래 내역이다. 마지막 줄에 품목이 한 줄 찍혀 있다.\n“어제: ${itemLabel(yesterdayOf(p))}.”`,
+          effects: [learn(`yday-${p}`)],
+        })),
+      }),
     },
     {
       // 알아낼 것이 없는 곳: 한 라운드에 한 곳만 살필 수 있으므로 여기를 고르면 그만큼 놓친다.
@@ -341,20 +441,54 @@ const item: TaskDef = {
       text: '소형 플래시로 투입구 안쪽 홈을 비춰 본다',
       tier: 1,
       when: { item: 'flash', by: 'actor' },
-      findings: byPrice((p) => ({
-        text: `소형 플래시로 투입구 안쪽을 비추자 홈의 모양이 또렷하다. ${SHAPE[p]}이다. 손이 끼일 걱정은 없다.`,
-        effects: [learn(`today-${p}`)],
-      })),
+      findings: [{ text: '소형 플래시를 투입구 안쪽으로 비추기로 했다. 좁은 틈이라 어디에 빛을 둘지가 중요하다.' }],
+      dig: digTwoStep('lit', {
+        first: {
+          text: '투입구는 좁고 깊다. 빛을 어떻게 댈까?',
+          good: '플래시를 비스듬히 대어 홈의 가장자리를 비춘다',
+          bad: '플래시를 투입구 한가운데로 곧게 비춘다',
+          badEnd: '빛이 안쪽에서 번져 아무것도 구분되지 않았다.',
+          badFirst: true,
+        },
+        second: {
+          text: '홈의 가장자리가 어슴푸레 보인다. 무엇을 확인할까?',
+          good: '홈의 모양과 두께를 눈으로 가늠한다',
+          bad: '홈의 깊이를 손가락으로 재 본다',
+          badEnd: '손가락이 끼일 뻔했다. 홈의 모양은 보지 못했다.',
+        },
+        clue: ITEM_ORDER.map((p) => ({
+          when: priceIs(p),
+          result: `소형 플래시로 투입구 안쪽을 비추자 홈의 모양이 또렷하다. ${SHAPE[p]}이다. 손이 끼일 걱정은 없다.`,
+          effects: [learn(`today-${p}`)],
+        })),
+      }),
     },
     {
       id: 'ledger',
       text: '자판기 옆에 걸린 장부의 오늘 줄을 읽는다',
       tier: 3,
       risk: '장부를 넘기던 손가락이 종이에 베였다. 피 한 방울이 떨어지자 오늘 줄의 글씨가 잠깐 꿈틀했다가 제자리로 돌아왔다.',
-      findings: byPrice((p) => ({
-        text: `장부의 오늘 날짜 줄은 비어 있다. 그 옆에 아주 작게 적혀 있다. “${itemLabel(p)}.”`,
-        effects: [learn(`ledger-${p}`)],
-      })),
+      findings: [{ text: '자판기 옆에 걸린 장부를 펼쳤다. 줄이 빽빽해서 오늘 날짜의 줄이 어디인지부터 찾아야 한다.' }],
+      dig: digTwoStep('ledger', {
+        first: {
+          text: '장부는 두껍고 날짜가 촘촘하다. 어떻게 찾을까?',
+          good: '가장 최근 날짜의 줄을 찾아 손가락으로 짚는다',
+          bad: '장부의 첫 장부터 차례로 넘긴다',
+          badEnd: '넘길수록 장부가 두꺼워지는 것 같았다. 오늘의 줄을 찾지 못했다.',
+        },
+        second: {
+          text: '오늘 날짜의 줄이 보인다. 무엇을 읽을까?',
+          good: '비어 있는 칸 옆의 작은 글씨를 읽는다',
+          bad: '합계 칸의 숫자를 읽는다',
+          badEnd: '합계 칸에는 아무것도 적혀 있지 않았다.',
+          badFirst: true,
+        },
+        clue: ITEM_ORDER.map((p) => ({
+          when: priceIs(p),
+          result: `장부의 오늘 날짜 줄은 비어 있다. 그 옆에 아주 작게 적혀 있다. “${itemLabel(p)}.”`,
+          effects: [learn(`ledger-${p}`)],
+        })),
+      }),
     },
   ],
   night: {
@@ -402,6 +536,7 @@ const item: TaskDef = {
     text: '자판기는 오늘 밤 무엇을 받는가?',
     facts: [
       'item-cycle',
+      'item-cycle-half',
       ...ITEM_ORDER.flatMap((p) => [`yday-${p}`, `night-last-${p}`, `no-item-${p}`, `today-${p}`, `ledger-${p}`]),
     ],
     answer: ITEMS.map(([id, label]) => ({ text: `${label}이다.`, when: priceIs(id) })),
@@ -419,33 +554,81 @@ const button: TaskDef = {
       id: 'notice',
       text: '버튼 위에 붙은 낡은 스티커를 읽는다',
       tier: 1,
-      findings: [
-        {
-          text: '스티커가 반쯤 벗겨져 있다. “눌러야 할 칸에는 초록 선이 이어져 있습니다.” 그 아래는 찢겨 없다.',
-          effects: [learn('wire-rule')],
+      findings: [{ text: '버튼 위에 붙은 낡은 스티커를 읽기로 했다. 반쯤 벗겨져 있다.' }],
+      dig: digTwoStep('notice', {
+        first: {
+          text: '스티커가 반쯤 벗겨져 있다. 어떻게 읽을까?',
+          good: '남아 있는 글씨를 한 글자씩 읽는다',
+          bad: '벗겨진 자리를 손톱으로 더 벗겨 본다',
+          badEnd: '스티커가 더 찢어졌다. 남은 글씨도 읽을 수 없게 되었다.',
         },
-      ],
+        second: {
+          text: '글씨가 이어진다. 무엇을 찾을까?',
+          good: '“눌러야”라는 말 뒤에 이어지는 조건을 찾는다',
+          bad: '스티커의 그림만 본다',
+          badEnd: '그림은 번개 무늬뿐이었다.',
+          badFirst: true,
+        },
+        clue: [
+          {
+            result: '스티커가 반쯤 벗겨져 있다. “눌러야 할 칸에는 초록 선이 이어져 있습니다.” 그 아래는 찢겨 없다.',
+            effects: [learn('wire-rule')],
+          },
+        ],
+      }),
     },
     {
       id: 'ear',
       text: '버튼 아래쪽에 귀를 대고 전류 소리를 따라간다',
       tier: 1,
       risk: '귀를 대는 순간 전류가 귓바퀴를 튀어 지나갔다. 한쪽 귀가 한참 윙윙거렸고, 머리를 흔들어도 소리가 가시지 않았다.',
-      findings: byWiring((w) => ({
-        text: `전류 소리를 따라 선을 눈으로 좇았다. 빨간 선이 ${buttonLabel(w.red)} 칸으로 들어간다.`,
-        effects: [learn(`red-at-${w.red}`)],
-        later: sanityLater(1),
-      })),
+      findings: [{ text: '버튼 아래쪽에 귀를 대고 전류 소리를 따라가기로 했다. 웅웅거리는 소리가 선마다 다르다.' }],
+      dig: digTwoStep('ear', {
+        first: {
+          text: '전류 소리가 귓가를 울린다. 어떻게 들을까?',
+          good: '귀를 살짝 떼고 소리가 가장 센 선을 눈으로 좇는다',
+          bad: '귀를 바짝 붙이고 소리만 듣는다',
+          badEnd: '소리가 머릿속에서 울려 어느 선인지 가려내지 못했다.',
+          badFirst: true,
+        },
+        second: {
+          text: '선이 몇 가닥 보인다. 어느 선을 따라갈까?',
+          good: '빨간 선을 끝까지 눈으로 따라간다',
+          bad: '가까운 선 하나를 골라 따라간다',
+          badEnd: '고른 선은 빨간 선이 아니었다.',
+        },
+        clue: wiringClues((w) => ({
+          result: `전류 소리를 따라 선을 눈으로 좇았다. 빨간 선이 ${buttonLabel(w.red)} 칸으로 들어간다.`,
+          effects: [learn(`red-at-${w.red}`)],
+          later: sanityLater(1),
+        })),
+      }),
     },
     {
       id: 'dust',
       text: '덮개 틈으로 보이는 파란 선의 끝을 따라가 본다',
       tier: 1,
       risk: '덮개 틈에 눈을 가까이 대자 틈에서 불꽃이 튀었다. 눈앞이 하얘졌다가 천천히 돌아왔지만, 눈두덩이 화끈거리고 한동안 초점이 맞지 않았다.',
-      findings: byWiring((w) => ({
-        text: `덮개 틈으로 파란 선의 끝을 따라가 보았다. ${buttonLabel(w.green)} 칸으로는 가지 않는다.`,
-        effects: [learn(`blue-not-${w.green}`)],
-      })),
+      findings: [{ text: '덮개 틈으로 보이는 파란 선의 끝을 따라가 보기로 했다. 틈이 좁다.' }],
+      dig: digTwoStep('dust', {
+        first: {
+          text: '덮개 틈이 좁고 어둡다. 어떻게 들여다볼까?',
+          good: '틈에서 한 뼘 떨어져 비스듬히 들여다본다',
+          bad: '틈에 눈을 바짝 대고 들여다본다',
+          badEnd: '틈에서 불꽃이 튀었다. 눈앞이 하얘져 아무것도 보지 못했다.',
+        },
+        second: {
+          text: '파란 선이 어둠 속으로 이어진다. 무엇을 확인할까?',
+          good: '파란 선이 닿는 칸을 하나씩 짚어 본다',
+          bad: '선의 색만 확인한다',
+          badEnd: '색은 파랬다. 그것뿐이다.',
+          badFirst: true,
+        },
+        clue: wiringClues((w) => ({
+          result: `덮개 틈으로 파란 선의 끝을 따라가 보았다. ${buttonLabel(w.green)} 칸으로는 가지 않는다.`,
+          effects: [learn(`blue-not-${w.green}`)],
+        })),
+      }),
     },
     {
       // 아이템은 낮의 조사에서만 얻는다. 이미 누가 장갑을 가졌으면 이 곳은 보이지 않는다.
@@ -465,10 +648,26 @@ const button: TaskDef = {
       text: '절연 장갑을 끼고 덮개를 열어 초록 선의 끝을 확인한다',
       tier: 1,
       when: { item: 'glove', by: 'actor' },
-      findings: byWiring((w) => ({
-        text: `절연 장갑을 끼고 덮개를 열었다. 초록 선의 끝이 ${buttonLabel(w.green)} 칸에 이어져 있다. 손끝이 저리지 않았다.`,
-        effects: [learn(`green-at-${w.green}`)],
-      })),
+      findings: [{ text: '절연 장갑을 끼고 덮개를 열기로 했다. 고무 장갑 안에서 손끝이 둔하다.' }],
+      dig: digTwoStep('peek-glove', {
+        first: {
+          text: '덮개 안쪽에 전선이 어지럽게 모여 있다. 어떻게 열까?',
+          good: '덮개를 천천히 젖혀 선이 보이게 한다',
+          bad: '덮개를 한 번에 열어젖힌다',
+          badEnd: '덮개가 튕겨 열리며 선들이 흩어졌다. 어느 선이 어느 선인지 알 수 없다.',
+        },
+        second: {
+          text: '선이 드러났다. 무엇을 확인할까?',
+          good: '초록 선의 끝이 어느 칸에 닿는지 짚어 본다',
+          bad: '가장 가까운 선 하나만 확인한다',
+          badEnd: '그 선은 초록 선이 아니었다.',
+          badFirst: true,
+        },
+        clue: wiringClues((w) => ({
+          result: `절연 장갑을 끼고 덮개를 열었다. 초록 선의 끝이 ${buttonLabel(w.green)} 칸에 이어져 있다. 손끝이 저리지 않았다.`,
+          effects: [learn(`green-at-${w.green}`)],
+        })),
+      }),
     },
     {
       id: 'peek',
@@ -577,24 +776,58 @@ const change: TaskDef = {
       text: '벽의 낙서 아래쪽을 읽는다',
       tier: 1,
       risk: '‘받지 마’를 읽는 동안 글자들이 눈앞에서 한 줄씩 늘어나는 것 같았다. 눈을 뗄 수 없어 한참을 그대로 서 있었고, 정신을 차렸을 때 벽의 글씨는 처음 그대로였다.',
-      findings: [
-        {
-          text: '벽의 낙서를 한 줄씩 읽는다. 날짜와 상품 번호 사이에 같은 글씨가 반복된다.\n[[shake|받지 마.]] [[shake|받지 마.]] [[shake|받지 마.]]\n그 아래 누군가 더 작게 적었다. “손이 안 빠진다. 거스름돈을 쥐면 그게 빚이 된다.”',
-          effects: [learn('change-debt')],
+      findings: [{ text: '벽의 낙서 아래쪽을 읽기로 했다. 같은 글씨가 반복되어 눈이 아프다.' }],
+      dig: digTwoStep('wall', {
+        first: {
+          text: '같은 글씨가 줄줄이 이어진다. 어떻게 읽을까?',
+          good: '반복되는 글씨는 건너뛰고 다른 글씨를 찾는다',
+          bad: '반복되는 글씨를 끝까지 읽는다',
+          badEnd: '“받지 마”를 읽을수록 글씨가 늘어나는 것 같았다. 눈을 뗄 수 없어 시간만 흘렀다.',
+          badFirst: true,
         },
-      ],
+        second: {
+          text: '글씨 크기가 군데군데 다르다. 어디를 읽을까?',
+          good: '작게 적힌 글씨를 읽는다',
+          bad: '가장 큰 글씨를 다시 읽는다',
+          badEnd: '큰 글씨는 아까와 같았다.',
+        },
+        clue: [
+          {
+            result:
+              '벽의 낙서를 한 줄씩 읽는다. 날짜와 상품 번호 사이에 같은 글씨가 반복된다.\n[[shake|받지 마.]] [[shake|받지 마.]] [[shake|받지 마.]]\n그 아래 누군가 더 작게 적었다. “손이 안 빠진다. 거스름돈을 쥐면 그게 빚이 된다.”',
+            effects: [learn('change-debt')],
+          },
+        ],
+      }),
     },
     {
       id: 'tray-paper',
       text: '반환구 뚜껑 안쪽에 붙은 종이를 읽는다',
       tier: 1,
       risk: '종이를 읽는 동안 반환구 안쪽에서 동전 구르는 소리가 났다. 굴러 나올 것 같은데 끝내 나오지 않았다. 기다리는 동안 손바닥에 식은땀이 찼다.',
-      findings: [
-        {
-          text: '반환구 뚜껑 안쪽에 영수증 한 장이 붙어 있다. 항목 칸에는 아무것도 적혀 있지 않고, 맨 아래 줄만 인쇄되어 있다.\n“거스름돈 반환 시 거래는 [[whisper|처음부터]] 다시 시작됩니다.”',
-          effects: [learn('change-restart')],
+      findings: [{ text: '반환구 뚜껑 안쪽에 종이가 붙어 있다. 뚜껑이 무겁다.' }],
+      dig: digTwoStep('tray-paper', {
+        first: {
+          text: '뚜껑을 어떻게 열까?',
+          good: '뚜껑을 살짝 들어 종이의 인쇄된 줄을 읽는다',
+          bad: '뚜껑을 활짝 열어 안쪽을 들여다본다',
+          badEnd: '뚜껑이 열리자 동전이 쏟아질 것 같아 황급히 닫았다. 종이를 읽지 못했다.',
         },
-      ],
+        second: {
+          text: '종이에 줄이 몇 개 있다. 어디를 읽을까?',
+          good: '맨 아래 줄까지 읽는다',
+          bad: '항목 칸의 빈칸을 오래 본다',
+          badEnd: '빈칸에는 아무것도 없다. 시간만 흘렀다.',
+          badFirst: true,
+        },
+        clue: [
+          {
+            result:
+              '반환구 뚜껑 안쪽에 영수증 한 장이 붙어 있다. 항목 칸에는 아무것도 적혀 있지 않고, 맨 아래 줄만 인쇄되어 있다.\n“거스름돈 반환 시 거래는 [[whisper|처음부터]] 다시 시작됩니다.”',
+            effects: [learn('change-restart')],
+          },
+        ],
+      }),
     },
     {
       id: 'ledger',
@@ -639,12 +872,28 @@ const change: TaskDef = {
       text: '집게로 반환구의 동전을 집어 올리고 장부를 지켜본다',
       tier: 1,
       when: { item: 'tongs', by: 'actor' },
-      findings: [
-        {
-          text: '집게로 동전을 집어 올리자 장부의 값이 집게를 쥔 사람의 이름 아래로 옮겨 적혔다. 손은 다치지 않았다.',
-          effects: [learn('change-moved')],
+      findings: [{ text: '집게로 반환구의 동전을 집어 올리기로 했다. 장부는 손이 닿는 곳에 있다.' }],
+      dig: digTwoStep('tongs', {
+        first: {
+          text: '동전이 집게 끝에서 흔들린다. 장부를 어떻게 볼까?',
+          good: '동전을 집은 채 장부를 곁눈으로 지켜본다',
+          bad: '동전을 집자마자 장부를 덮어 버린다',
+          badEnd: '장부를 덮자 아무 일도 일어나지 않았다. 확인하지 못했다.',
         },
-      ],
+        second: {
+          text: '장부가 미세하게 떨린다. 어디를 볼까?',
+          good: '집게를 든 채 장부의 이름 칸을 지켜본다',
+          bad: '동전을 곧장 반환구에 돌려놓는다',
+          badEnd: '동전을 돌려놓는 사이 장부의 변화를 놓쳤다.',
+          badFirst: true,
+        },
+        clue: [
+          {
+            result: '집게로 동전을 집어 올리자 장부의 값이 집게를 쥔 사람의 이름 아래로 옮겨 적혔다. 손은 다치지 않았다.',
+            effects: [learn('change-moved')],
+          },
+        ],
+      }),
     },
     {
       id: 'sign',
@@ -1157,6 +1406,7 @@ export const vending: Scenario = {
     { id: 'dawn-collect', text: '동이 트면 자판기는 장부를 정산한다. 정산되지 않은 것은 가져간다.' },
     { id: 'machine-honest', text: '자판기가 말을 걸면 거짓으로 답해서는 안 된다.' },
     { id: 'item-cycle', text: '자판기는 어제 받은 것의 다음 것을 받는다. 순서는 낡은 동전 → 가족사진 → 사원증 → 다시 낡은 동전이다.' },
+    { id: 'item-cycle-half', text: '벽의 낙서에서 품목이 같은 순서로 되풀이되는 것을 읽었다. (어느 쪽으로 도는지는 읽지 못했다)' },
     { id: 'wire-rule', text: '눌러야 할 칸에는 초록 전선이 이어져 있다.' },
     { id: 'change-debt', text: '거스름돈을 손에 쥐는 순간 그것은 빚이 된다.' },
     { id: 'change-restart', text: '거스름돈을 도로 넣으면 거래가 처음부터 다시 시작된다.' },

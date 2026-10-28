@@ -343,6 +343,8 @@ function go(sc: Scenario, g: ScenarioGame, target: string, depth = 0, carry: Cha
   run.votes = {}
   run.picks = {}
   run.personal = {}
+  // 직전 조사의 선택은 바로 다음 개인 장면까지만 남는다
+  if (node.kind !== 'personal') delete run.lastSplit
   run.ready = []
   run.result = null
   // 밤에서 낮으로 넘어가면 하루가 지난다: 하루씩 흐르는 시계(`clock.byDay`)는 이때 1 오른다 (오답·패스든 성공이든 똑같이)
@@ -474,6 +476,8 @@ function resolveSplit(sc: Scenario, g: ScenarioGame, node: SplitNode): void {
   for (const a of splitShort(g, node)) {
     for (const [pid, id] of Object.entries(picks)) if (id === a.id) delete picks[pid]
   }
+  // 누가 무엇을 골랐는지를 다음 개인 장면(조사 뒤의 파고들기)이 볼 수 있게 남긴다 (`did` 조건)
+  run.lastSplit = { ...picks }
 
   // 1) 비공개 발견: 조건은 모두 같은 시점의 상태로 정하고, 효과는 사람 순서대로 적용한다
   const found = run.players.map((p) => {
@@ -535,13 +539,22 @@ function startPersonal(sc: Scenario, g: ScenarioGame, node: PersonalNode): void 
   for (const p of run.players) {
     const prog: PersonalProgress = { pick: null, committed: false, step: null, done: false, lines: [], changes: [], later: [], stepChanges: [] }
     run.personal[p.id] = prog
-    if (!node.options.some((o) => optionOpenFor(g, o, p).open)) {
+    const open = node.options.filter((o) => optionOpenFor(g, o, p).open)
+    if (open.length === 0) {
       prog.done = true
       prog.committed = true
-      prog.lines.push(isPanicked(p) ? '정신을 잃어 아무것도 하지 못했다.' : '할 수 있는 일이 없었다.')
+      // 조용한 장면(`quiet`)에서는 조사하지 않은 사람에게 "할 수 있는 일이 없었다"를 띄우지 않는다 (정신을 잃은 경우는 알린다)
+      if (isPanicked(p)) prog.lines.push('정신을 잃어 아무것도 하지 못했다.')
+      else if (!node.quiet) prog.lines.push('할 수 있는 일이 없었다.')
+    } else if (open.length === 1 && open[0].auto) {
+      // 열린 선택지가 `auto` 하나뿐이면 고르는 화면 없이 바로 고른 것으로 한다
+      prog.pick = open[0].id
+      run.picks[p.id] = open[0].id
     }
   }
-  settlePersonal(sc, g, node)
+  // 모두가 고른 것으로 정해졌으면(또는 할 일이 없으면) 바로 적용하고 이어지는 단계로 간다
+  if (run.players.every((p) => run.personal[p.id].done || run.personal[p.id].pick !== null)) commitPersonal(sc, g, node, true)
+  else settlePersonal(sc, g, node)
 }
 
 /**

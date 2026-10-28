@@ -12,7 +12,19 @@
 //   틀린 시도와 패스는 같은 횟수(`pass-<과제>-1·2`)로 세어져 조사 선택지가 3단계까지 열린다.
 // 조사 선택지는 3단계로 쌓인다: 처음에는 1단계만, 오답·패스가 한 번이면 2단계까지, 두 번 이상이면 3단계까지 열린다.
 // 위험한 곳: `risk`가 있는 조사 중 하나가 판마다 무작위로 "위험한 곳"으로 뽑힌다. 거기를 살핀 사람은 발견은 그대로 얻되 이야기와 대가(`hazard`)를 치른다.
-import type { Cond, Effect, Node, PersonalOption, PersonalStep, PrivateFinding, QuestionDef, Route, Text, VarSpec } from './types.ts'
+import type { Cond, Effect, Node, PersonalOption, PersonalStep, PrivateFinding, QuestionDef, Route, SoloChoice, Text, VarSpec } from './types.ts'
+// (PersonalStep·SoloChoice는 단계형 조사의 단계에도 쓴다)
+
+/**
+ * 단계형 조사("파고들기"): 이 조사를 고른 사람은 결과를 얻기 전에 혼자 몇 단계를 더 고른다.
+ * 모두가 조사를 고르고 나면 이 조사를 고른 사람만 `steps`를 따라 진행하고(나머지는 기다린다), 모두 끝나면 결과가 한꺼번에 나온다.
+ * 단서는 단계의 선택지 효과(`effects`의 `learn`)로 얻으므로, 어떻게 고르느냐에 따라 얻는 것이 달라진다 — 잘 고르면 온전한 단서,
+ * 어긋나면 흐릿한 단서나 대가만 얻는다. 판정에 난수는 없다.
+ */
+export interface ProbeDig {
+  /** 첫 단계는 `steps[0]`이다. 단계 id는 과제 안에서 유일해야 한다(다른 조사의 단계와도). 선택지가 없는 단계는 읽고 계속을 누르면 `then`으로 간다. */
+  steps: PersonalStep[]
+}
 
 export interface TaskProbe {
   /** 조사 선택지 id (과제 안에서 유일) */
@@ -41,6 +53,11 @@ export interface TaskProbe {
   risk?: Text
   /** true면 부상자는 이 조사를 할 수 없다 (몸을 쓰는 조사) */
   needsHealthy?: boolean
+  /**
+   * 있으면 단계형 조사다: `findings`는 조사를 고른 직후 읽는 도입(단서 없이 분위기만)이고, 단서는 `dig`의 단계에서 얻는다.
+   * 둘이 함께 하는 조사(`min`)와는 쓸 수 없다.
+   */
+  dig?: ProbeDig
 }
 
 export interface TaskAnswer {
@@ -75,6 +92,8 @@ export interface TaskDef {
   intro: Text
   /** 조사 장면의 글 (기본 문구가 있다) */
   probeText?: Text
+  /** 단계형 조사(`TaskProbe.dig`)를 한 사람이 혼자 이어서 살필 때 모두에게 보이는 장면의 글 (기본 문구가 있다) */
+  digText?: Text
   probes: TaskProbe[]
   /** 아무것도 살피지 않고 기다리는 선택지 (조사 칸이 모자란 인원이 고른다) */
   waitText?: string
@@ -164,6 +183,67 @@ const seenFlag = (t: string, p: string) => `seen-${t}-${p}`
 /** 과제 `t`에서 이번 판의 위험한 곳을 가리키는 무작위 값의 이름 */
 export const riskVar = (t: string) => `risk-${t}`
 
+/** `digTwoStep`의 한 단계: 질문과, 맞는 선택지·어긋난 선택지 */
+export interface DigTwoStepPart {
+  /** 이 단계의 서술과 질문 */
+  text: Text
+  /** 맞는 선택지의 문구 */
+  good: string
+  /** 어긋난 선택지의 문구 */
+  bad: string
+  /** 어긋난 선택지를 골랐을 때 읽는 글 (거기서 끝나고 단서를 얻지 못한다) */
+  badEnd: Text
+  /** true면 어긋난 선택지를 먼저 보인다 (맞는 선택지가 늘 첫 번째가 되지 않게, 조사마다 번갈아 쓴다) */
+  badFirst?: boolean
+}
+
+export interface DigTwoStep {
+  /** 첫 단계: 맞는 쪽을 고르면 둘째 단계로 가고, 어긋난 쪽을 고르면 거기서 끝난다 */
+  first: DigTwoStepPart
+  /** 둘째 단계: 맞게 고르면 단서를 얻고, 어긋나게 고르면 얻지 못한다 */
+  second: DigTwoStepPart
+  /** 맞게 끝냈을 때 얻는 것. 판마다 다르면 여러 개를 쓰고 `when`으로 가른다 (판마다 하나만 보인다. 맞는 선택지 문구는 같아야 한다) */
+  clue: { when?: Cond; result: Text; effects: Effect[]; later?: Effect[] }[]
+  /** 어긋났을 때 치르는 대가 (기본: 정신력 −1) */
+  cost?: Effect[]
+}
+
+/**
+ * 두 단계 파고들기를 만든다. 맞게 두 번 고르면 단서를 얻고, 어긋나게 고르면 얻지 못하고 대가를 치른다.
+ * 단계 id는 `<id>-1`, `<id>-x`(첫 단계에서 어긋난 끝), `<id>-2`이고 선택지 id는 `<id>-1-good` 같은 꼴이다.
+ */
+export function digTwoStep(id: string, o: DigTwoStep): ProbeDig {
+  const cost: Effect[] = o.cost ?? [{ stat: 'sanity', add: -1, to: 'actor' }]
+  const arrange = <T,>(goods: T[], bad: T, badFirst?: boolean): T[] => (badFirst ? [bad, ...goods] : [...goods, bad])
+  const goods2: SoloChoice[] = o.clue.map((c, i) => ({
+    id: `${id}-2-good-${i}`,
+    text: o.second.good,
+    ...(c.when ? { when: c.when } : {}),
+    result: c.result,
+    effects: c.effects,
+    ...(c.later ? { later: c.later } : {}),
+  }))
+  return {
+    steps: [
+      {
+        id: `${id}-1`,
+        text: o.first.text,
+        choices: arrange<SoloChoice>(
+          [{ id: `${id}-1-good`, text: o.first.good, then: `${id}-2` }],
+          { id: `${id}-1-bad`, text: o.first.bad, then: `${id}-x` },
+          o.first.badFirst,
+        ),
+      },
+      { id: `${id}-x`, text: o.first.badEnd, effects: cost },
+      {
+        id: `${id}-2`,
+        text: o.second.text,
+        choices: arrange<SoloChoice>(goods2, { id: `${id}-2-bad`, text: o.second.bad, result: o.second.badEnd, effects: cost }, o.second.badFirst),
+      },
+    ],
+  }
+}
+
 const pieces = (text: Text) => (typeof text === 'string' ? [{ text }] : text)
 
 /** 위험한 곳을 살폈을 때의 발견: 원래 발견에 위험의 이야기와 대가를 덧붙인 것이 앞에, 평범한 발견이 뒤에 온다 */
@@ -228,7 +308,17 @@ export function buildTasks(spec: TasksSpec): TasksBuilt {
     if (risky.length === 1) throw new Error(`과제 "${t.id}": 위험한 곳(risk)은 둘 이상이어야 판마다 어디가 위험한지 달라진다`)
     if (risky.length > 0 && !t.hazard?.length) throw new Error(`과제 "${t.id}": risk가 있는 조사가 있으면 대가(hazard)도 있어야 한다`)
     if (spec.dayClock && !t.night) throw new Error(`과제 "${t.id}": dayClock이면 오답·패스 뒤의 밤(night)이 있어야 시간이 흐른다`)
+    const stepIds = new Set<string>()
     for (const p of t.probes) {
+      if (p.dig) {
+        if (p.dig.steps.length === 0) throw new Error(`과제 "${t.id}" 조사 "${p.id}": 단계형 조사(dig)에는 단계가 하나 이상 있어야 한다`)
+        if (p.min !== undefined) throw new Error(`과제 "${t.id}" 조사 "${p.id}": 둘이 함께 하는 조사(min)는 단계형 조사(dig)로 만들 수 없다`)
+        if ((p.max ?? 1) !== 1) throw new Error(`과제 "${t.id}" 조사 "${p.id}": 단계형 조사(dig)는 한 사람만 고를 수 있다 (max 1)`)
+        for (const st of p.dig.steps) {
+          if (stepIds.has(st.id)) throw new Error(`과제 "${t.id}" 조사 "${p.id}": 단계 id "${st.id}"가 과제 안에서 겹친다`)
+          stepIds.add(st.id)
+        }
+      }
       if (p.min !== undefined && (!Number.isInteger(p.min) || p.min < 2)) throw new Error(`과제 "${t.id}" 조사 "${p.id}": min은 2 이상의 정수여야 한다`)
       if (p.min !== undefined && p.max !== undefined && p.max < p.min) throw new Error(`과제 "${t.id}" 조사 "${p.id}": max가 min보다 작다`)
       if (p.findings.length === 0 || p.findings[p.findings.length - 1].when) {
@@ -267,6 +357,8 @@ export function buildTasks(spec: TasksSpec): TasksBuilt {
     const t = task.id
     const firstNode = nodes.length
     const probe = `${t}-probe`
+    const dig = `${t}-dig`
+    const dug = task.probes.filter((p) => p.dig)
     const think = `${t}-think`
     // 오답·패스 뒤에는 하루가 저문다: 이 과제만의 밤이 있으면 거기를 거쳐 조사로 돌아간다
     const afterMiss = task.night ? `${t}-night` : probe
@@ -312,8 +404,23 @@ export function buildTasks(spec: TasksSpec): TasksBuilt {
       private: task.probes.flatMap((p) =>
         withRisk(task, p).map((f): PrivateFinding => ({ ...f, action: p.id, effects: [...(f.effects ?? []), { flag: seenFlag(t, p.id) }] })),
       ),
-      outcomes: [{ next: think }],
+      // 단계형 조사를 고른 사람이 있으면 먼저 파고들기로 간다 (그 사람만 혼자 단계를 진행하고, 끝나면 추리로 간다)
+      outcomes: dug.length > 0 ? [{ when: { any: dug.map((p): Cond => ({ picked: p.id })) }, next: dig }, { next: think }] : [{ next: think }],
     })
+
+    // 파고들기: 단계형 조사를 고른 사람만 혼자 이어서 고른다. 모두 끝나야 결과가 나오고, 조사하지 않은 사람은 조용히 기다린다.
+    if (dug.length > 0) {
+      nodes.push({
+        id: dig,
+        kind: 'personal',
+        title: `${task.title} · 조사`,
+        text: task.digText ?? '조사를 맡은 사람은 혼자 이어서 살핀다. 나머지는 끝나기를 기다린다.',
+        quiet: true,
+        options: dug.map((p): PersonalOption => ({ id: `dig-${p.id}`, text: p.text, when: { did: p.id }, auto: true, then: p.dig!.steps[0].id })),
+        steps: dug.flatMap((p) => p.dig!.steps),
+        next: think,
+      })
+    }
 
     // 추리: 답을 걸거나 패스한다. 사슬이 있으면 "추리를 시작한다"와 "더 조사한다"뿐이다.
     const passChoice = {

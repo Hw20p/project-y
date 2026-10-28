@@ -84,6 +84,8 @@ export function validateScenario(sc: Scenario): ValidationReport {
     } else if ('picked' in c) {
       if (!scope.picked) at(where, '`picked`는 분할 장면의 결과·비공개 발견에서만 쓸 수 있다')
       else if (actions && !actions.has(c.picked)) at(where, `알 수 없는 행동 "${c.picked}"`)
+    } else if ('did' in c) {
+      if (!scope.actor) at(where, '`did`는 행동하는 사람이 있는 곳(개인 장면의 선택지 조건)에서만 쓸 수 있다')
     } else if ('not' in c) {
       cond(c.not, scope, where, actions)
     } else if ('all' in c) {
@@ -169,11 +171,15 @@ export function validateScenario(sc: Scenario): ValidationReport {
   const validatePersonal = (n: PersonalNode): void => {
     const where = `장면 ${n.id}`
     text(n.text, SCENE_TEXT, `${where} 글`)
-    if (n.options.length < 2) at(where, '선택지가 2개 이상 필요함')
+    // 선택지가 모두 `auto`인 장면(조사 뒤의 파고들기)은 고르는 장면이 아니라서, 선택지 수와 "조건 없는 선택지"를 따지지 않는다
+    const allAuto = n.options.length > 0 && n.options.every((o) => o.auto)
+    if (n.options.length < 2 && !allAuto) at(where, '선택지가 2개 이상 필요함')
     unique(where, n.options.map((o) => o.id))
-    if (!n.options.some((o) => !o.when && !o.calming)) {
+    if (!allAuto && !n.options.some((o) => !o.when && !o.calming)) {
       at(where, '조건 없이 고를 수 있는 선택지가 없음 (아무도 고를 게 없으면 의미가 없다)')
     }
+    if (n.options.some((o) => o.auto) && !allAuto) at(where, '`auto`는 선택지가 모두 auto일 때만 쓸 수 있다')
+    for (const o of n.options) if (o.auto && !o.then) at(`${where}/${o.id}`, '`auto` 선택지에는 이어지는 단계(then)가 있어야 한다')
     const steps = n.steps ?? []
     const stepIds = new Set(steps.map((st) => st.id))
     unique(`${where} 단계`, steps.map((st) => st.id))

@@ -15,7 +15,7 @@
 //
 // 판마다 바뀌는 값: seat(따뜻한 소파 a·b·c), stairs(난간 기둥 수 9·11·13), order(과제 순서),
 // events(사건 순서: 발소리가 먼저 fp / 전화가 먼저 ph), risk-<과제>(그 과제에서 위험한 조사).
-import { buildTasks, type ChainStep, type TaskAnswer, type TaskDef, type TaskProbe } from '../../scenario/tasks.ts'
+import { buildTasks, digTwoStep, type ChainStep, type TaskAnswer, type TaskDef, type TaskProbe } from '../../scenario/tasks.ts'
 import type { Cond, Node, PersonalOption, Scenario, Text } from '../../scenario/types.ts'
 
 export type SeatId = 'a' | 'b' | 'c'
@@ -507,36 +507,85 @@ const lift: TaskDef = {
       text: '패널 아래의 낙서를 읽는다',
       tier: 1,
       risk: '낙서를 읽는 동안 패널 안쪽에서 달각, 하고 무언가 버튼을 눌러 보는 소리가 났다. 안쪽에서. 손끝이 얼어붙어 한참을 움직일 수 없었다.',
-      findings: [
-        {
-          text: '층 버튼에는 눌러 본 흔적이 가득하다. 패널 아래에 누군가 낙서를 남겼다. “누르면 돌아온다.”',
-          effects: [learn('lift-panel-press')],
+      findings: [{ text: '패널 아래에 낙서가 있다. 몇 겹으로 긁혀 있어서 한눈에 읽히지 않는다.' }],
+      dig: digTwoStep('scrawl', {
+        first: {
+          text: '긁힌 자국이 겹쳐 있다. 어느 줄부터 읽을까?',
+          good: '가장 깊게 파인 줄부터 손끝으로 따라 읽는다',
+          bad: '가장 알아보기 쉬운 얕은 줄부터 읽는다',
+          badEnd: '얕은 줄은 최근에 장난으로 그은 선이었다. 의미를 읽어 내지 못했다.',
         },
-      ],
+        second: {
+          text: '깊은 줄이 글씨로 이어진다. 어떻게 읽을까?',
+          good: '글씨를 처음부터 끝까지 소리 내지 않고 읽는다',
+          bad: '글씨의 모양만 본떠 그려 본다',
+          badEnd: '모양만 따라 그리다 보니 뜻을 놓쳤다.',
+          badFirst: true,
+        },
+        clue: [
+          {
+            result: '층 버튼에는 눌러 본 흔적이 가득하다. 패널 아래에 누군가 낙서를 남겼다. “누르면 돌아온다.”',
+            effects: [learn('lift-panel-press')],
+          },
+        ],
+      }),
     },
     {
       id: 'glance',
       text: '문의 거울을 정면으로 보지 않고 곁눈으로 훑는다',
       tier: 1,
       risk: '곁눈질이 길어졌다. 거울 속 일행 사이에서 누군가 천천히 고개를 돌려 이쪽을 똑바로 보았다. [[shake|눈이 마주쳤다.]] 시선을 돌리자 거울은 다시 평범해졌다.',
-      findings: [
-        {
-          text: '거울을 똑바로 보지 않고 곁눈으로만 훑었다. 비친 일행이 한 명 더 많은 것 같다. 확실하지는 않다. 오래 보고 싶지 않은 느낌이 든다.',
-          effects: [learn('lift-mirror-hint')],
+      findings: [{ text: '거울 같은 문을 정면으로 보지 않고 곁눈으로 훑어보기로 했다. 눈이 자꾸 정면으로 돌아가려 한다.' }],
+      dig: digTwoStep('glance', {
+        first: {
+          text: '거울 쪽으로 눈이 끌린다. 어떻게 볼까?',
+          good: '시선을 문틀 가장자리에 두고 곁눈으로만 일행의 수를 가늠한다',
+          bad: '잠깐만 정면으로 확인한다',
+          badEnd: '정면으로 보는 순간 거울 속 누군가와 눈이 마주칠 뻔했다. 서둘러 눈을 돌렸지만 아무것도 알아내지 못했다.',
+          badFirst: true,
         },
-      ],
+        second: {
+          text: '거울 속에 일행이 비친다. 얼마나 볼까?',
+          good: '한 번만 훑고 곧바로 눈을 돌린다',
+          bad: '자꾸 눈이 가는 곳을 끝까지 따라간다',
+          badEnd: '시선이 길어졌다. 눈을 돌렸을 때는 본 것이 이미 흐려져 있었다.',
+        },
+        clue: [
+          {
+            result: '거울을 똑바로 보지 않고 곁눈으로만 훑었다. 비친 일행이 한 명 더 많은 것 같다. 확실하지는 않다. 오래 보고 싶지 않은 느낌이 든다.',
+            effects: [learn('lift-mirror-hint')],
+          },
+        ],
+      }),
     },
     {
       // 낙서와 같은 단서에 이르는 다른 길 (대가는 없다). 둘이 나눠 맡으면 같은 것을 두 번 얻는 셈이 된다.
       id: 'buttons',
       text: '층 버튼에 배어 있는 손때를 살핀다',
       tier: 1,
-      findings: [
-        {
-          text: '층 버튼마다 손때가 깊게 배어 있다. 누르고 또 눌러서 닳은 흔적인데, 닳은 정도가 모두 비슷하다. 어느 층을 눌렀든 결국 같은 곳으로 돌아왔다는 듯이.\n버튼 곁에 누군가 손톱으로 새겨 둔 글씨가 있다. “누르면 돌아온다.”',
-          effects: [learn('lift-panel-press')],
+      findings: [{ text: '층 버튼에 배어 있는 손때를 살피기로 했다. 버튼마다 닳은 정도가 조금씩 다르다.' }],
+      dig: digTwoStep('grime', {
+        first: {
+          text: '버튼이 여럿이다. 무엇을 비교할까?',
+          good: '닳은 정도를 버튼마다 비교한다',
+          bad: '가장 반짝이는 버튼 하나만 본다',
+          badEnd: '반짝이는 버튼은 새로 닦은 것이었다. 알 수 있는 것이 없다.',
         },
-      ],
+        second: {
+          text: '닳은 정도가 비슷하다. 무엇을 더 확인할까?',
+          good: '버튼 곁에 긁혀 있는 글씨를 읽는다',
+          bad: '버튼 숫자의 순서를 외운다',
+          badEnd: '숫자는 B6부터 B1까지 평범했다. 알아낸 것이 없다.',
+          badFirst: true,
+        },
+        clue: [
+          {
+            result:
+              '층 버튼마다 손때가 깊게 배어 있다. 누르고 또 눌러서 닳은 흔적인데, 닳은 정도가 모두 비슷하다. 어느 층을 눌렀든 결국 같은 곳으로 돌아왔다는 듯이.\n버튼 곁에 누군가 손톱으로 새겨 둔 글씨가 있다. “누르면 돌아온다.”',
+            effects: [learn('lift-panel-press')],
+          },
+        ],
+      }),
     },
     {
       // 알아낼 것이 없는 곳: 한 라운드에 한 곳만 살필 수 있으므로 여기를 고르면 그만큼 놓친다.
@@ -567,13 +616,29 @@ const lift: TaskDef = {
       text: '층 버튼 하나를 눌러 본다 (문은 열어 둔 채)',
       tier: 2,
       risk: '버튼이 눌린 순간 문 안쪽에서 무언가 마주 손바닥을 댔다. 차가운 진동이 손가락뼈를 타고 어깨까지 올라왔다. 한동안 손이 제 것 같지 않았다.',
-      findings: [
-        {
-          text: '손가락이 닿은 버튼에 불이 들어왔다. 층 표시등이 B6, B5… 거꾸로 내려가더니 B7에서 멈췄다. 되돌아온 것이다. 문은 열린 채였지만 등줄기가 서늘했다.',
-          effects: [learn('lift-press-back')],
-          later: sanityLater(1),
+      findings: [{ text: '층 버튼을 눌러 보기로 했다. 문이 닫히지 않게 한 발은 문턱에 걸쳐 둔다. 손가락이 어느 버튼 위에서 멈췄다.' }],
+      dig: digTwoStep('press', {
+        first: {
+          text: '어느 버튼을 눌러 볼까? 문 안으로 들어갈지도 정해야 한다.',
+          good: '문을 열어 둔 채, 가장 가까운 층 버튼을 가볍게 한 번 누른다',
+          bad: '문 안으로 들어가 가장 높은 층(B1) 버튼을 끝까지 누른다',
+          badEnd: '버튼에 불이 들어오는 순간 문이 등 뒤에서 닫혔다. 서둘러 문틈에 발을 끼웠지만 한참이 지난 뒤였다. 아무것도 알아내지 못했다.',
         },
-      ],
+        second: {
+          text: '버튼에 불이 들어왔다. 층 표시등이 움직이기 시작한다. 어디를 볼까?',
+          good: '표시등의 숫자가 어떻게 변하는지 끝까지 따라간다',
+          bad: '버튼 쪽만 보며 손가락이 닿은 자리를 확인한다',
+          badEnd: '버튼만 보느라 표시등을 놓쳤다. 무슨 일이 있었는지는 알 수 없다.',
+          badFirst: true,
+        },
+        clue: [
+          {
+            result: '층 표시등이 B6, B5… 거꾸로 내려가더니 B7에서 멈췄다. 되돌아온 것이다. 문은 열린 채였지만 등줄기가 서늘했다.',
+            effects: [learn('lift-press-back')],
+            later: sanityLater(1),
+          },
+        ],
+      }),
     },
     {
       id: 'still',
@@ -604,12 +669,28 @@ const lift: TaskDef = {
       text: '점검 열쇠로 패널 뚜껑을 열고 안쪽 배선을 본다',
       tier: 1,
       when: { item: 'key', by: 'actor' },
-      findings: [
-        {
-          text: '열쇠가 패널 뚜껑에 꼭 맞았다. 뚜껑을 열자 층 버튼의 선들이 모두 한 단자로 묶여 있다. 어느 버튼을 눌러도 같은 곳으로 돌아오게 되어 있다.',
-          effects: [learn('lift-wiring')],
+      findings: [{ text: '열쇠가 패널 뚜껑에 꼭 맞았다. 뚜껑 안쪽은 어두워서 선들이 뒤엉켜 보인다.' }],
+      dig: digTwoStep('panel', {
+        first: {
+          text: '선이 어지럽게 얽혀 있다. 어떻게 살펴볼까?',
+          good: '손끝으로 선 하나를 골라 끝까지 따라간다',
+          bad: '가장 굵은 선 하나를 잡아당겨 본다',
+          badEnd: '굵은 선을 당기자 패널 안에서 불꽃이 튀었다. 손을 뗐을 때는 눈앞이 번쩍거려 아무것도 보이지 않았다.',
+          badFirst: true,
         },
-      ],
+        second: {
+          text: '선이 어디론가 모이는 것이 느껴진다. 무엇을 확인할까?',
+          good: '모든 선이 어디로 이어지는지 하나씩 세어 본다',
+          bad: '모이는 곳의 겉만 눈으로 훑는다',
+          badEnd: '겉만 보아서는 알 수 없었다. 어둠 속에서 손만 헛돌았다.',
+        },
+        clue: [
+          {
+            result: '층 버튼의 선들이 모두 한 단자로 묶여 있다. 어느 버튼을 눌러도 같은 곳으로 돌아오게 되어 있다.',
+            effects: [learn('lift-wiring')],
+          },
+        ],
+      }),
     },
     {
       id: 'sign',
@@ -699,22 +780,56 @@ const sofa: TaskDef = {
               risk: '쪽지를 빼내려 손을 밀어 넣는 순간 소파 틈이 손목을 꼭 물었다. 쿠션이 숨을 쉬듯 한 번 부풀었고, 손을 빼냈을 때 손목에는 붉은 자국이 선명했다.',
             }
           : {}),
-        findings: bySeat((s) => ({
-          text: `${NOTE_POS[pos]}에는 이렇게 적혀 있다. “${SOFA_NOTES[s].find((n) => n.pos === pos)!.text}”`,
-          effects: [learn(noteId(s, pos))],
-        })),
+        findings: [{ text: `${NOTE_POS[pos]}에 쪽지가 있다. 오래되어 글씨가 흐리다. 읽어 보기로 했다.` }],
+        dig: digTwoStep(`memo-${pos}`, {
+          first: {
+            text: '쪽지의 글씨가 흐리다. 어떻게 읽을까?',
+            good: '쪽지를 평평히 펴고 글씨를 한 줄씩 따라 읽는다',
+            bad: '글자 몇 개만 훑고 뜻을 짐작한다',
+            badEnd: '짐작한 뜻은 이내 흐려졌다. 정확히 무슨 말인지 읽어 내지 못했다.',
+            badFirst: pos === 'book',
+          },
+          second: {
+            text: '문장이 이어진다. 끝까지 확인한다.',
+            good: '마지막 글자까지 읽고 처음으로 돌아가 한 번 더 맞춰 본다',
+            bad: '앞의 한 줄만 믿고 쪽지를 덮는다',
+            badEnd: '한 줄만으로는 뜻이 바뀐다. 쪽지를 덮고 나서야 마지막 줄이 중요했을 것 같았다.',
+            badFirst: pos !== 'book',
+          },
+          clue: SOFAS.map(([s]) => ({
+            when: seatIs(s),
+            result: `${NOTE_POS[pos]}에는 이렇게 적혀 있다. “${SOFA_NOTES[s].find((n) => n.pos === pos)!.text}”`,
+            effects: [learn(noteId(s, pos))],
+          })),
+        }),
       }),
     ),
     {
       id: 'notice',
       text: '접수대 위의 작은 안내판을 읽는다',
       tier: 1,
-      findings: [
-        {
-          text: '접수대 위에 작은 안내판이 서 있다. “쪽지는 세 장 남겨 두었습니다. 사실이 적힌 쪽지는 그중 한 장뿐이며, 그 쪽지는 오래전에 쓰인 것입니다.”',
-          effects: [learn('sofa-rule')],
+      findings: [{ text: '접수대 위에 작은 안내판이 서 있다. 글씨가 작고 빽빽하다.' }],
+      dig: digTwoStep('notice', {
+        first: {
+          text: '안내판의 글씨가 빽빽하다. 어떻게 읽을까?',
+          good: '첫 줄부터 끝까지 차례로 읽는다',
+          bad: '굵게 쓴 줄만 읽는다',
+          badEnd: '굵은 줄은 인사말뿐이었다. 본문은 읽지 못했다.',
+          badFirst: true,
         },
-      ],
+        second: {
+          text: '본문에 쪽지 이야기가 나온다. 무엇을 확인할까?',
+          good: '쪽지 가운데 사실이 몇 장인지, 그 쪽지가 어떤지를 따져 읽는다',
+          bad: '안내판의 테두리 장식을 본다',
+          badEnd: '장식은 낡은 꽃무늬였다. 알아낸 것이 없다.',
+        },
+        clue: [
+          {
+            result: '접수대 위에 작은 안내판이 서 있다. “쪽지는 세 장 남겨 두었습니다. 사실이 적힌 쪽지는 그중 한 장뿐이며, 그 쪽지는 오래전에 쓰인 것입니다.”',
+            effects: [learn('sofa-rule')],
+          },
+        ],
+      }),
     },
     {
       // 알아낼 것이 없는 곳: 한 라운드에 한 곳만 살필 수 있으므로 여기를 고르면 그만큼 놓친다.
@@ -745,10 +860,27 @@ const sofa: TaskDef = {
       text: '쪽지들의 잉크를 비교해 본다',
       tier: 2,
       risk: '쪽지를 겹쳐 들여다보던 손가락이 종이 모서리에 베였다. 얇은 상처에서 피가 배어 나와 쪽지 한 장에 번졌는데, 번진 자국은 금세 마른 잉크처럼 검게 변했다.',
-      findings: bySeat((s) => ({
-        text: `세 쪽지의 잉크를 가까이서 비교했다. ${NOTE_POS[trueNotePos(s)]}의 잉크만 오래되어 갈색으로 바랬다. 나머지 둘은 최근에 쓴 글씨다.`,
-        effects: [learn(`ink-${s}`)],
-      })),
+      findings: [{ text: '쪽지 세 장을 겹쳐 잉크를 비교하기로 했다. 세 쪽지의 글씨가 비슷해서 쉽지 않다.' }],
+      dig: digTwoStep('ink', {
+        first: {
+          text: '글씨가 서로 비슷하다. 무엇부터 비교할까?',
+          good: '스탠드 불빛 아래에서 잉크의 가장자리를 비교한다',
+          bad: '글씨체가 닮은 것끼리 묶어 본다',
+          badEnd: '글씨체는 세 장이 모두 비슷했다. 한참을 들여다보았지만 가려내지 못했다.',
+        },
+        second: {
+          text: '잉크의 가장자리가 보인다. 무엇을 기준으로 가를까?',
+          good: '바랜 정도와 번진 정도를 겹쳐 본다',
+          bad: '글자의 크기를 비교한다',
+          badEnd: '크기는 모두 같았다. 알아낸 것이 없다.',
+          badFirst: true,
+        },
+        clue: SOFAS.map(([s]) => ({
+          when: seatIs(s),
+          result: `세 쪽지의 잉크를 가까이서 비교했다. ${NOTE_POS[trueNotePos(s)]}의 잉크만 오래되어 갈색으로 바랬다. 나머지 둘은 최근에 쓴 글씨다.`,
+          effects: [learn(`ink-${s}`)],
+        })),
+      }),
     },
     {
       id: 'pair',
@@ -773,12 +905,29 @@ const sofa: TaskDef = {
       text: '돋보기로 쪽지들의 잉크를 자세히 들여다본다',
       tier: 1,
       when: { item: 'loupe', by: 'actor' },
-      findings: bySeat((s) => {
-        const real = SOFA_NOTES[s].find((n) => n.holds(s))!
-        return {
-          text: `돋보기로 쪽지들의 잉크를 들여다보았다. 가장 오래된 잉크로 쓰인 글은 “${real.text}”이다. (${NOTE_POS[real.pos]})`,
-          effects: [learn(`lens-${s}`)],
-        }
+      findings: [{ text: '돋보기를 들고 쪽지 세 장을 펼쳤다. 렌즈 너머로 잉크의 결이 보이기 시작한다.' }],
+      dig: digTwoStep('lens', {
+        first: {
+          text: '렌즈를 어떻게 쓸까?',
+          good: '렌즈를 쪽지에 바짝 붙이고 글자 하나의 획을 따라간다',
+          bad: '렌즈를 멀리 두고 쪽지 전체를 한 번에 본다',
+          badEnd: '전체를 보려 하니 아무것도 또렷하지 않았다. 렌즈 너머가 어지럽다.',
+          badFirst: true,
+        },
+        second: {
+          text: '획의 끝이 보인다. 어디에서 확인할까?',
+          good: '세 쪽지의 획 끝이 번진 모양을 차례로 비교한다',
+          bad: '가장 반듯한 글씨의 쪽지 하나만 본다',
+          badEnd: '한 장만 보아서는 비교할 수 없었다. 알아낸 것이 없다.',
+        },
+        clue: SOFAS.map(([s]) => {
+          const real = SOFA_NOTES[s].find((n) => n.holds(s))!
+          return {
+            when: seatIs(s),
+            result: `돋보기로 쪽지들의 잉크를 들여다보았다. 가장 오래된 잉크로 쓰인 글은 “${real.text}”이다. (${NOTE_POS[real.pos]})`,
+            effects: [learn(`lens-${s}`)],
+          }
+        }),
       }),
     },
     {
@@ -860,41 +1009,108 @@ const stairs: TaskDef = {
       text: '어둠 속에서 난간 기둥을 손으로 더듬어 센다',
       tier: 1,
       risk: '기둥을 세다가 손바닥이 난간 이음매의 녹슨 쇠 조각에 깊이 긁혔다. 어둠 속이라 얼마나 다쳤는지 보이지 않았지만, 따뜻한 것이 손목을 타고 흘렀다.',
-      findings: byStairs((n) => ({
-        text: `어둠 속에서 손으로 더듬으며 난간 기둥을 셌다. 손끝이 떨려서 정확하지는 않다.\n${STAIR_CLUE_TEXT[STAIR_CLUES[n][0].id]}`,
-        effects: [learn(STAIR_CLUES[n][0].id)],
-        later: sanityLater(1),
-      })),
+      findings: [{ text: '어둠 속에서 난간 기둥을 손으로 더듬어 세기로 했다. 손끝이 떨려서 정확하지는 않을 것이다.' }],
+      dig: digTwoStep('feel', {
+        first: {
+          text: '기둥이 어둠 속으로 이어진다. 어떻게 셀까?',
+          good: '난간 한쪽에서 시작해 기둥을 하나씩 천천히 짚으며 센다',
+          bad: '손바닥으로 훑으며 빠르게 센다',
+          badEnd: '빠르게 훑다 보니 몇 개를 놓쳤는지도 모르겠다. 센 값을 믿을 수 없다.',
+        },
+        second: {
+          text: '기둥이 끝났다. 센 값을 어떻게 할까?',
+          good: '처음 센 곳으로 돌아와 한 번 더 센다',
+          bad: '센 값을 곧장 머릿속에 새기고 손을 뗀다',
+          badEnd: '확인하지 않은 숫자는 금세 흐려졌다.',
+          badFirst: true,
+        },
+        clue: STAIRS.map((n) => ({
+          when: stairsIs(n),
+          result: `어둠 속에서 손으로 더듬으며 난간 기둥을 셌다. 손끝이 떨려서 정확하지는 않다.\n${STAIR_CLUE_TEXT[STAIR_CLUES[n][0].id]}`,
+          effects: [learn(STAIR_CLUES[n][0].id)],
+          later: sanityLater(1),
+        })),
+      }),
     },
     {
       id: 'half',
       text: '난간 한쪽의 절반만 세고 두 배로 어림해 본다',
       tier: 1,
-      findings: byStairs((n) => ({
-        text: `난간 한쪽의 기둥만 세고 두 배로 어림해 보았다. 대략의 값이다.\n${STAIR_CLUE_TEXT[STAIR_CLUES[n][1].id]}`,
-        effects: [learn(STAIR_CLUES[n][1].id)],
-      })),
+      findings: [{ text: '난간 한쪽의 기둥만 세고 두 배로 어림해 보기로 했다.' }],
+      dig: digTwoStep('half', {
+        first: {
+          text: '기둥이 한쪽에 줄지어 있다. 먼저 무엇을 볼까?',
+          good: '기둥 사이의 간격이 같은지 먼저 확인하고 센다',
+          bad: '눈대중으로 한쪽 기둥 수를 센다',
+          badEnd: '간격이 일정한지도 모른 채 센 숫자는 어림조차 되지 않았다.',
+          badFirst: true,
+        },
+        second: {
+          text: '한쪽을 다 셌다. 두 배로 어림하려 한다.',
+          good: '끝 기둥이 겹치는지 따져서 두 배로 한다',
+          bad: '센 값에 곧장 2를 곱한다',
+          badEnd: '끝 기둥을 두 번 센 것인지 알 수 없다. 어림이 어긋났다.',
+        },
+        clue: STAIRS.map((n) => ({
+          when: stairsIs(n),
+          result: `난간 한쪽의 기둥만 세고 두 배로 어림해 보았다. 대략의 값이다.\n${STAIR_CLUE_TEXT[STAIR_CLUES[n][1].id]}`,
+          effects: [learn(STAIR_CLUES[n][1].id)],
+        })),
+      }),
     },
     {
       id: 'torch',
       text: '손전등으로 비추며 난간 기둥을 하나씩 센다',
       tier: 1,
       when: { item: 'torch', by: 'actor' },
-      findings: byStairs((n) => ({
-        text: `청동 손전등으로 비추며 난간 기둥을 하나씩 세었다. 모두 ${n}개다. 틀림없다.`,
-        effects: [learn(`torch-${n}`)],
-      })),
+      findings: [{ text: '청동 손전등으로 비추며 난간 기둥을 하나씩 세기로 했다. 빛이 닿는 곳은 계단이 계단처럼 보인다.' }],
+      dig: digTwoStep('torch', {
+        first: {
+          text: '빛이 난간을 따라 번진다. 어떻게 비출까?',
+          good: '빛을 난간 위에서 아래로 한 기둥씩 옮긴다',
+          bad: '빛을 넓게 퍼뜨려 한꺼번에 본다',
+          badEnd: '넓게 비추니 기둥이 겹쳐 보였다. 세다가 포기했다.',
+        },
+        second: {
+          text: '기둥이 하나씩 드러난다. 어떻게 셀까?',
+          good: '센 기둥의 수를 손가락으로 표시하며 센다',
+          bad: '머릿속으로만 센다',
+          badEnd: '숫자를 놓쳐 어디까지 셌는지 알 수 없었다.',
+          badFirst: true,
+        },
+        clue: STAIRS.map((n) => ({
+          when: stairsIs(n),
+          result: `청동 손전등으로 비추며 난간 기둥을 하나씩 세었다. 모두 ${n}개다. 틀림없다.`,
+          effects: [learn(`torch-${n}`)],
+        })),
+      }),
     },
     {
       id: 'sign',
       text: '계단 입구의 낡은 안내판을 읽는다',
       tier: 1,
-      findings: [
-        {
-          text: '계단 입구에 낡은 안내판이 붙어 있다. “계단은 세는 사람의 수만큼 길어집니다. 센 숫자보다 하나 적게 내려가야 끝이 있습니다.”',
-          effects: [learn('stairs-rule')],
+      findings: [{ text: '계단 입구에 낡은 안내판이 붙어 있다. 글씨가 많이 바랬다.' }],
+      dig: digTwoStep('sign', {
+        first: {
+          text: '글씨가 바래서 잘 보이지 않는다. 어떻게 읽을까?',
+          good: '안내판을 비스듬히 비추어 바랜 글씨를 읽는다',
+          bad: '글씨가 또렷한 맨 위 제목만 읽는다',
+          badEnd: '제목은 “주의” 두 글자뿐이었다. 본문은 읽지 못했다.',
         },
-      ],
+        second: {
+          text: '본문이 이어진다. 무엇을 찾을까?',
+          good: '숫자와 관련된 말이 나올 때까지 끝까지 읽는다',
+          bad: '앞부분만 읽고 넘긴다',
+          badEnd: '숫자에 대한 말이 어디에 있었는지 놓쳤다.',
+          badFirst: true,
+        },
+        clue: [
+          {
+            result: '계단 입구에 낡은 안내판이 붙어 있다. “계단은 세는 사람의 수만큼 길어집니다. 센 숫자보다 하나 적게 내려가야 끝이 있습니다.”',
+            effects: [learn('stairs-rule')],
+          },
+        ],
+      }),
     },
     {
       // 알아낼 것이 없는 곳: 한 라운드에 한 곳만 살필 수 있으므로 여기를 고르면 그만큼 놓친다.
@@ -938,21 +1154,55 @@ const stairs: TaskDef = {
       tier: 2,
       needsHealthy: true,
       risk: '되짚어 올라오는 길에 발밑의 한 칸이 사라진 것처럼 푹 꺼졌다. 난간을 잡았지만 발목이 크게 꺾였다. 올라와서 보니 그 칸은 원래 자리에 멀쩡히 있었다.',
-      findings: byStairs((n) => ({
-        text: `칸을 세며 조심스럽게 내려갔다. ${STAIR_STEPS[n]} 칸에서 계단이 끝났다. 끝에는 로비와 똑같은 로비가 있었다. 서둘러 되짚어 올라왔다.`,
-        effects: [learn(`walk-${n}`)],
-        later: sanityLater(2),
-      })),
+      findings: [{ text: '난간을 잡고 계단을 내려가 보기로 했다. 아래에서 숫자 세는 소리가 점점 가까워진다.' }],
+      dig: digTwoStep('walk', {
+        first: {
+          text: '숫자 소리가 발걸음 사이로 파고든다. 어떻게 셀까?',
+          good: '숫자 소리에 맞추지 않고 내 걸음으로 칸을 센다',
+          bad: '숫자 소리에 맞춰 함께 센다',
+          badEnd: '소리에 맞춰 세다 보니 어느새 내 숫자가 아니었다. 몇 칸을 내려왔는지 알 수 없다.',
+          badFirst: true,
+        },
+        second: {
+          text: '끝이 보이는 듯하다. 어떻게 돌아갈까?',
+          good: '내려온 칸 수를 속으로 되뇌며 천천히 되짚어 올라간다',
+          bad: '서둘러 뛰어 올라간다',
+          badEnd: '뛰어 오르느라 센 숫자를 놓쳤다.',
+        },
+        clue: STAIRS.map((n) => ({
+          when: stairsIs(n),
+          result: `칸을 세며 조심스럽게 내려갔다. ${STAIR_STEPS[n]} 칸에서 계단이 끝났다. 끝에는 로비와 똑같은 로비가 있었다. 서둘러 되짚어 올라왔다.`,
+          effects: [learn(`walk-${n}`)],
+          later: sanityLater(2),
+        })),
+      }),
     },
     {
       id: 'wall',
       text: '계단 벽에 새겨진 눈금을 읽는다',
       tier: 3,
       risk: '눈금을 더듬어 읽던 손가락이 벽의 날카로운 홈에 걸려 손톱이 갈라졌다. 벽이 손가락을 놓아 주기 전까지 아주 짧게, 안쪽에서 무언가 당기는 느낌이 있었다.',
-      findings: byStairs((n) => ({
-        text: `계단 벽에 오래된 눈금이 새겨져 있다. 맨 아래 눈금 옆에 작은 글씨가 있다. “${STAIR_STEPS[n]}.”`,
-        effects: [learn(`wall-${n}`)],
-      })),
+      findings: [{ text: '계단 벽에 눈금 같은 것이 새겨져 있다. 어둠 속이라 손으로 더듬어 읽기로 했다.' }],
+      dig: digTwoStep('wall', {
+        first: {
+          text: '눈금이 길게 이어진다. 어디부터 읽을까?',
+          good: '눈금의 맨 아래에서부터 위로 올라가며 읽는다',
+          bad: '눈에 띄는 큰 홈부터 읽는다',
+          badEnd: '큰 홈은 누군가의 낙서였다. 읽을수록 손가락만 아프다.',
+        },
+        second: {
+          text: '맨 아래 눈금 옆에 작은 글씨가 있는 듯하다. 어떻게 읽을까?',
+          good: '손끝으로 글씨의 홈을 따라 읽는다',
+          bad: '눈으로만 훑는다',
+          badEnd: '어둠 속에서는 눈으로 읽을 수 없었다.',
+          badFirst: true,
+        },
+        clue: STAIRS.map((n) => ({
+          when: stairsIs(n),
+          result: `계단 벽에 오래된 눈금이 새겨져 있다. 맨 아래 눈금 옆에 작은 글씨가 있다. “${STAIR_STEPS[n]}.”`,
+          effects: [learn(`wall-${n}`)],
+        })),
+      }),
     },
   ],
   night: {

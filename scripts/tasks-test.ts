@@ -403,3 +403,39 @@ for (const n of [1, 2]) {
   assert.deepEqual(viewForScenario(tasksChain, toThink(9), 'p1').scene!.choices.map((c) => c.id), ['lock-reason', 'lock-pass'], '추리를 시작할지 정하는 장면은 섞이지 않는다')
   console.log('통과: 보기 순서 섞기 (판마다 다르고, 모두에게 같고, 시작 여부 장면은 그대로)')
 }
+
+// 14) 단계형 조사(dig): 빌더가 작성 실수를 잡고, 파고들기 장면을 조사 뒤에 이어 준다
+{
+  const def = chainLockDef()
+  type Probe = (typeof def.probes)[number]
+  const withDig = (p: Partial<Probe>, second?: Partial<Probe>) => ({
+    ...def,
+    probes: [{ ...def.probes[0], ...p }, ...(second ? [{ ...def.probes[1], ...second }] : [def.probes[1]]), ...def.probes.slice(2)],
+  })
+  const step = (id: string) => ({ id, text: '읽는다.' })
+  assert.throws(() => buildTasks({ tasks: [withDig({ dig: { steps: [] } })], after: 'x' }), /단계가 하나 이상/)
+  assert.throws(() => buildTasks({ tasks: [withDig({ min: 2, dig: { steps: [step('a')] } })], after: 'x' }), /만들 수 없다/)
+  assert.throws(() => buildTasks({ tasks: [withDig({ max: 2, dig: { steps: [step('a')] } })], after: 'x' }), /한 사람만/)
+  assert.throws(
+    () => buildTasks({ tasks: [withDig({ dig: { steps: [step('a')] } }, { dig: { steps: [step('a')] } })], after: 'x' }),
+    /겹친다/,
+  )
+
+  // 파고들기는 조사 장면 다음, 추리 장면 앞에 온다: 단계형 조사를 고른 사람이 있을 때만
+  const built = buildTasks({ tasks: [withDig({ dig: { steps: [step('a')] } })], after: 'x' })
+  const probe = built.nodes.find((n) => n.id === 'lock-probe')
+  const digNode = built.nodes.find((n) => n.id === 'lock-dig')
+  assert.equal(probe?.kind, 'split')
+  assert.equal(digNode?.kind, 'personal')
+  if (digNode?.kind === 'personal') {
+    assert.equal(digNode.quiet, true)
+    assert.deepEqual(digNode.options.map((o) => [o.id, o.auto, o.then]), [['dig-look', true, 'a']])
+    assert.equal(digNode.next, 'lock-think')
+  }
+  if (probe?.kind === 'split') {
+    assert.deepEqual(probe.outcomes.map((o) => o.next), ['lock-dig', 'lock-think'])
+  }
+  // 단계형 조사가 없는 과제에는 파고들기 장면이 없다
+  assert.equal(buildTasks({ tasks: [def], after: 'x' }).nodes.some((n) => n.id === 'lock-dig'), false)
+  console.log('통과: 단계형 조사의 빌더 검증과 파고들기 장면')
+}
