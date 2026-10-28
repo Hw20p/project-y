@@ -185,9 +185,7 @@ export function ScenarioDrawer({
               {journal.length === 0 && <li className="text-sm text-ash">아직 없다.</li>}
               {[...journal].reverse().map((j) => (
                 <li key={j.key}>
-                  <p className="text-xs text-ash">
-                    {j.run}번째 판 · {j.label}
-                  </p>
+                  <p className="text-xs text-ash">{j.label}</p>
                   <p className="font-serif-kr text-sm leading-7 text-fog">{j.line}</p>
                 </li>
               ))}

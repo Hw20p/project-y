@@ -11,21 +11,20 @@ export function BoardStrip({ board, onOpen }: { board: BoardView; onOpen: () => 
     <button
       type="button"
       onClick={onOpen}
-      className="mt-3 w-full rounded border border-edge bg-panel/50 px-3 py-2 text-left hover:border-fog/50"
+      className="mt-2 w-full rounded border border-edge bg-panel/50 px-3 py-1.5 text-left hover:border-fog/50"
     >
       <span className="flex items-baseline justify-between gap-3 text-[11px] tracking-widest text-ash">
-        <span>조사 보드 · 목표</span>
+        <span>{current?.text ? '조사 보드 · 지금 과제' : '조사 보드 · 목표'}</span>
         <span>
           풀린 의문 <span className={solved === board.questions.length ? 'text-gain' : 'text-bone'}>{solved}</span>/{board.questions.length}
           {seen < board.questions.length && <span className="ml-1.5 text-ash/70">(발견 {seen})</span>}
         </span>
       </span>
-      <span className="mt-1 block font-serif-kr text-sm leading-6 text-fog">{board.goal}</span>
-      {current?.text && (
-        <span className="mt-1.5 block font-serif-kr text-sm leading-6 text-amber">
-          <span className="mr-1.5 text-xs tracking-widest text-ash">지금 과제</span>
-          {current.text}
-        </span>
+      {/* 과제를 풀고 있을 때는 지금 과제만 보이고, 목표 문장은 조사 보드 탭에 있다 (위쪽을 차지하지 않게) */}
+      {current?.text ? (
+        <span className="mt-0.5 block font-serif-kr text-sm leading-6 text-amber">{current.text}</span>
+      ) : (
+        <span className="mt-0.5 block font-serif-kr text-sm leading-6 text-fog">{board.goal}</span>
       )}
     </button>
   )

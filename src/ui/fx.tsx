@@ -79,12 +79,51 @@ export function useFx(): FxApi {
 
 const SPEED_LABEL: Record<Speed, string> = { 1: '보통', 2: '빠름', 0: '즉시' }
 
+/** 설정 단추 하나: 누르면 연출 설정(`FxSettingsBar`)이 아래로 펼쳐진다. 바깥을 누르거나 Esc로 닫는다. */
+export function FxSettingsMenu() {
+  const [open, setOpen] = useState(false)
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
+    const onDown = (e: MouseEvent) => {
+      if (!(e.target as Element | null)?.closest('[data-fx-menu]')) setOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('mousedown', onDown)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('mousedown', onDown)
+    }
+  }, [open])
+  return (
+    <div className="relative" data-fx-menu>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-label="설정"
+        className={`rounded border px-2.5 py-2 text-sm sm:px-2.5 sm:py-1 sm:text-xs ${
+          open ? 'border-glow/40 bg-glow/10 text-glow' : 'border-edge bg-panel/60 text-fog hover:border-fog/50 hover:text-bone'
+        }`}
+      >
+        <span aria-hidden>⚙</span>
+        <span className="ml-1.5 hidden sm:inline">설정</span>
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-30 mt-1.5 w-60 rounded border border-edge bg-panel p-3 shadow-lg shadow-black/50">
+          <FxSettingsBar />
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function FxSettingsBar() {
   const { speed, sound, volume, warp, setSpeed, setSound, setVolume, setWarp } = useFx()
   const order: Speed[] = [1, 2, 0]
   return (
-    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 text-xs text-ash sm:justify-end">
-      <span className="flex items-center gap-2">
+    <div className="flex flex-col items-stretch gap-3 text-xs text-ash">
+      <span className="flex items-center justify-between gap-2">
         <span>글자 속도</span>
         <span className="flex overflow-hidden rounded border border-edge">
           {order.map((s) => (
@@ -99,38 +138,43 @@ export function FxSettingsBar() {
           ))}
         </span>
       </span>
-      <button
-        type="button"
-        onClick={() => setWarp(!warp)}
-        title="정신력이 낮을 때 글이 번지고 일그러지는 연출"
-        className={`rounded border px-3 py-1.5 sm:px-2 sm:py-0.5 ${
-          warp ? 'border-glow/40 text-glow' : 'border-edge hover:text-fog'
-        }`}
-      >
-        일그러짐 {warp ? '켬' : '끔'}
-      </button>
-      <span className="flex items-center gap-2">
-        {sound && (
-          <input
-            type="range"
-            min={0}
-            max={100}
-            step={5}
-            value={Math.round(volume * 100)}
-            onChange={(e) => setVolume(Number(e.target.value) / 100)}
-            aria-label="음량"
-            className="h-1 w-16 accent-glow sm:w-20"
-          />
-        )}
+      <span className="flex items-center justify-between gap-2" title="정신력이 낮을 때 글이 번지고 일그러지는 연출">
+        <span>일그러짐</span>
         <button
           type="button"
-          onClick={() => setSound(!sound)}
+          onClick={() => setWarp(!warp)}
           className={`rounded border px-3 py-1.5 sm:px-2 sm:py-0.5 ${
-            sound ? 'border-glow/40 text-glow' : 'border-edge hover:text-fog'
+            warp ? 'border-glow/40 text-glow' : 'border-edge hover:text-fog'
           }`}
         >
-          소리 {sound ? '켬' : '끔'}
+          {warp ? '켬' : '끔'}
         </button>
+      </span>
+      <span className="flex items-center justify-between gap-2">
+        <span>소리</span>
+        <span className="flex items-center gap-2">
+          {sound && (
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={5}
+              value={Math.round(volume * 100)}
+              onChange={(e) => setVolume(Number(e.target.value) / 100)}
+              aria-label="음량"
+              className="h-1 w-20 accent-glow"
+            />
+          )}
+          <button
+            type="button"
+            onClick={() => setSound(!sound)}
+            className={`rounded border px-3 py-1.5 sm:px-2 sm:py-0.5 ${
+              sound ? 'border-glow/40 text-glow' : 'border-edge hover:text-fog'
+            }`}
+          >
+            {sound ? '켬' : '끔'}
+          </button>
+        </span>
       </span>
     </div>
   )

@@ -219,14 +219,47 @@ export function ScenarioParty({
   online: Record<string, boolean>
 }) {
   const compact = view.players.length >= COMPACT_FROM
-  const [folded, setFolded] = useState(false)
+  // 둘 이상이면 접을 수 있다. 좁은 화면(휴대폰)에서는 선택지가 화면 아래로 밀리지 않게 접은 채로 시작한다.
+  const foldable = view.players.length >= 2
+  const [folded, setFolded] = useState(() => foldable && typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches)
 
   const rows = view.players.map((p) => ({ p, isMe: p.id === view.me.id, ...partyTag(view, p, reading, online) }))
 
-  // 접힌 모습: 이름과 상태 점, 정신력 숫자만
-  if (compact && folded) {
+  // 혼자일 때: 카드 하나가 아니라 한 줄로 (이름·입사 배경·정신력·나머지 스텟·상태)
+  if (rows.length === 1) {
+    const { p, tag, tone } = rows[0]
+    const pct = (p.stats.sanity / STAT_MAX.sanity) * 100
     return (
-      <div className="py-3">
+      <div className="py-2">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded border border-glow/40 bg-glow/5 px-3 py-1.5 text-xs">
+          <span className={`text-sm ${p.panic ? 'text-ash line-through decoration-loss/60' : 'text-bone'}`}>
+            {p.name}
+            {p.hurt && <span className="ml-1 text-xs text-loss no-underline" title="부상">✚</span>}
+          </span>
+          <span className="text-ash">{archetypeName(p.archetype)}</span>
+          <span className="flex items-center gap-1.5" title="정신력">
+            <span className="text-[11px] text-ash">정신력</span>
+            <span className="h-1.5 w-16 overflow-hidden rounded bg-ink">
+              <span
+                className="block h-full rounded transition-all duration-500"
+                style={{ width: `${pct}%`, background: pct <= 30 ? '#c0524a' : '#8a93de' }}
+              />
+            </span>
+            <span className="text-fog">{p.stats.sanity}</span>
+          </span>
+          <span className="text-ash">
+            체력 <span className="text-fog">{p.stats.body}</span> · 관찰 <span className="text-fog">{p.stats.insight}</span>
+          </span>
+          {tag && <span className={`ml-auto ${tone}`}>{tag}</span>}
+        </div>
+      </div>
+    )
+  }
+
+  // 접힌 모습: 이름과 상태 점, 정신력 숫자만
+  if (foldable && folded) {
+    return (
+      <div className="py-2">
         <PartyFold count={rows.length} folded onToggle={() => setFolded(false)} />
         <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="파티원">
           {rows.map(({ p, isMe, tag, tone }) => (
@@ -239,6 +272,7 @@ export function ScenarioParty({
             >
               <span className={`h-1.5 w-1.5 shrink-0 rounded-full bg-current ${tone}`} aria-hidden />
               <span className={p.panic ? 'text-ash line-through decoration-loss/60' : 'text-bone'}>{p.name}</span>
+              {p.hurt && <span className="text-[10px] text-loss" title="부상">✚</span>}
               <span className="text-[10px] text-ash">{p.stats.sanity}</span>
             </li>
           ))}
@@ -248,9 +282,9 @@ export function ScenarioParty({
   }
 
   return (
-    <div className="py-3">
-      {compact && <PartyFold count={rows.length} folded={false} onToggle={() => setFolded(true)} />}
-      <ul className={`grid grid-cols-2 gap-2 sm:grid-cols-4 ${compact ? 'mt-2' : ''}`} aria-label="파티원">
+    <div className="py-2">
+      {foldable && <PartyFold count={rows.length} folded={false} onToggle={() => setFolded(true)} />}
+      <ul className={`grid grid-cols-2 gap-2 sm:grid-cols-4 ${foldable ? 'mt-2' : ''}`} aria-label="파티원">
         {rows.map(({ p, isMe, tag, tone }) => {
           const pct = (p.stats.sanity / STAT_MAX.sanity) * 100
           return (

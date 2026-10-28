@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { stripFx } from '../../scenario/fx.ts'
 import { needMoreChoiceIds, type ScenarioView } from '../../scenario/view.ts'
 import { ReadingContext, type ScenarioClient } from '../client.ts'
-import { FxSettingsBar, playSfx, useMusic, type BgmId } from '../fx.tsx'
+import { FxSettingsMenu, playSfx, useMusic, type BgmId } from '../fx.tsx'
 import { DistortContext, distortAt } from '../Narration.tsx'
 import { loadJournal, pruneJournals, saveJournal, type JournalEntry } from '../storage.ts'
 import { BoardStrip } from './Board.tsx'
@@ -15,6 +15,19 @@ import { ScenarioResultPanel, type Impact } from './Results.tsx'
 import { ChoiceScene, PersonalScene, StoryScene } from './Scenes.tsx'
 
 const SOUND_OF = { death: 'death', fragment: 'fragment', item: 'item', good: 'good', bad: 'bad', success: 'good' } as const
+
+/** 며칠째 낮/밤인지 (시나리오가 장면에 시간대를 정해 둔 경우에만 보인다) */
+function TimeChip({ view, night }: { view: ScenarioView; night: boolean }) {
+  if (!view.timeOfDay) return null
+  return (
+    <span
+      className={`rounded border px-2 py-0.5 ${night ? 'border-glow/40 bg-glow/10 text-glow' : 'border-amber/40 bg-amber/10 text-amber'}`}
+    >
+      <span aria-hidden>{night ? '☾' : '☀'} </span>
+      {view.timeOfDay.day}일째 {night ? '밤' : '낮'}
+    </span>
+  )
+}
 
 /** 결과 하나를 "지난 기록"의 한 줄로 */
 function toJournal(view: ScenarioView): JournalEntry | null {
@@ -58,7 +71,8 @@ export function ScenarioScreen({
     if (!entry || seen.current.has(entry.key)) return
     seen.current.add(entry.key)
     setJournal((j) => {
-      const next = [...j, entry].slice(-80)
+      // 지난 기록은 지금 판의 것만 남긴다 (다시 도전하면 이전 판의 기록은 버린다)
+      const next = [...j.filter((e) => e.run === entry.run), entry].slice(-80)
       saveJournal(journalKey, next)
       return next
     })
@@ -179,37 +193,61 @@ export function ScenarioScreen({
       {blink > 0 && <div key={blink} className="light-blink" aria-hidden />}
       {impact && <div key={impact.id} className={`impact impact-${impact.kind}`} aria-hidden />}
 
-      <div
-        className={`mx-auto max-w-2xl px-4 pb-16 pt-5 ${impact?.kind === 'death' ? 'shake' : ''} ${darkness > 0 ? 'light-glow' : ''}`}
-        style={darkness > 0 ? ({ '--glow': darkness } as React.CSSProperties) : undefined}
+      {/* 위쪽 막대: 스크롤해도 항상 보인다. 연출 막(비네트·밤 색조)보다 위, 정보 패널보다 아래에 둔다. */}
+      <nav
+        aria-label="메뉴"
+        className="sticky top-0 z-[22] border-b border-edge/80 bg-ink/85 pt-[env(safe-area-inset-top)] shadow-[0_6px_16px_-10px_rgba(0,0,0,0.9)] backdrop-blur-md"
       >
-        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          {!ended ? (
-            <div className={`grid gap-1.5 sm:flex ${view.board ? 'grid-cols-3' : 'grid-cols-2'}`}>
+        <div className="mx-auto flex max-w-2xl items-center gap-2 px-4 py-2">
+          {!ended && (
+            <div className="flex min-w-0 flex-1 gap-1.5 sm:flex-none">
               {(
                 [
                   ...(view.board ? ([['board', '조사 보드', 'Q', view.board.questions.filter((q) => q.solved).length]] as const) : []),
                   ['clues', '단서·소지품', 'N', view.me.items.length + myClues(view).length],
                   ['entity', '자료', 'I', 0],
                 ] as const
-              ).map(([id, label, key, count]) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setDrawer(id)}
-                  className="rounded border border-edge bg-panel/60 px-2 py-2 text-center text-sm text-fog hover:border-fog/50 hover:text-bone sm:px-2.5 sm:py-1 sm:text-xs"
-                >
-                  {label}
-                  {count > 0 && <span className="ml-1 text-ash">{count}</span>}
-                  <span className="ml-1.5 hidden text-ash/70 sm:inline">{key}</span>
-                </button>
-              ))}
+              ).map(([id, label, key, count]) => {
+                const on = drawer === id || (id === 'entity' && drawer === 'journal')
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setDrawer(id)}
+                    aria-pressed={on}
+                    className={`flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border px-1 py-2 text-xs transition sm:flex-none sm:px-3 sm:py-1.5 ${
+                      on
+                        ? 'border-glow/50 bg-glow/15 text-glow'
+                        : 'border-edge bg-panel/70 text-fog hover:border-fog/50 hover:bg-panel hover:text-bone'
+                    }`}
+                  >
+                    {label}
+                    {count > 0 && (
+                      <span className="rounded-full bg-glow/20 px-1.5 text-[10px] leading-4 text-glow">{count}</span>
+                    )}
+                    <kbd className="hidden rounded border border-edge/80 px-1 font-sans text-[10px] leading-4 text-ash/80 sm:inline">{key}</kbd>
+                  </button>
+                )
+              })}
             </div>
-          ) : (
-            <span />
           )}
-          <FxSettingsBar />
+          {/* 시간대와 조명은 넓은 화면에서는 이 막대에 고정해 두고, 좁은 화면에서는 아래 머리글에 둔다 */}
+          {!ended && (
+            <div className="ml-auto hidden items-center gap-1.5 text-xs sm:flex">
+              <TimeChip view={view} night={night} />
+              <LightMeter view={view} />
+            </div>
+          )}
+          <div className={ended ? 'ml-auto' : ''}>
+            <FxSettingsMenu />
+          </div>
         </div>
+      </nav>
+
+      <div
+        className={`mx-auto max-w-2xl px-4 pb-16 pt-3 ${impact?.kind === 'death' ? 'shake' : ''} ${darkness > 0 ? 'light-glow' : ''}`}
+        style={darkness > 0 ? ({ '--glow': darkness } as React.CSSProperties) : undefined}
+      >
 
         {reconnecting && (
           <p className="mb-3 rounded border border-amber/40 bg-amber/10 px-3 py-2 text-sm text-amber">
@@ -218,27 +256,19 @@ export function ScenarioScreen({
         )}
 
         {!ended && (
-          <header className="border-b border-edge pb-3">
+          <header className="border-b border-edge pb-2">
             <div className="flex items-baseline justify-between gap-3 text-sm">
               <span className="text-bone">
                 {view.scenario.code} · {view.scenario.name}
               </span>
               <span className="text-xs text-ash">
-                {view.runNo}번째 판 · 방 코드 <span className="tracking-widest text-fog">{roomCode}</span>
+                <span className="hidden sm:inline">닿아 본 엔딩 {view.endings.reached.length}/{view.endings.total} · </span>방 코드{' '}
+                <span className="tracking-widest text-fog">{roomCode}</span>
               </span>
             </div>
-            <div className="mt-2 flex items-center justify-between gap-3 text-xs">
+            <div className="mt-2 flex items-center justify-between gap-3 text-xs sm:hidden">
               <span className="flex flex-wrap items-center gap-1.5">
-                {view.timeOfDay && (
-                  <span
-                    className={`rounded border px-2 py-0.5 ${
-                      night ? 'border-glow/40 bg-glow/10 text-glow' : 'border-amber/40 bg-amber/10 text-amber'
-                    }`}
-                  >
-                    <span aria-hidden>{night ? '☾' : '☀'} </span>
-                    {view.timeOfDay.day}일째 {night ? '밤' : '낮'}
-                  </span>
-                )}
+                <TimeChip view={view} night={night} />
                 <LightMeter view={view} />
               </span>
               <span className="text-ash">
@@ -303,7 +333,7 @@ export function ScenarioScreen({
       </div>
 
       {drawer && !ended && (
-        <ScenarioDrawer view={view} journal={journal} tab={drawer} onTab={setDrawer} onClose={() => setDrawer(null)} />
+        <ScenarioDrawer view={view} journal={journal.filter((e) => e.run === view.runNo)} tab={drawer} onTab={setDrawer} onClose={() => setDrawer(null)} />
       )}
      </DistortContext>
     </ReadingContext>

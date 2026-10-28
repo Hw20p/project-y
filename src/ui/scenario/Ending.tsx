@@ -45,7 +45,7 @@ export function ScenarioEnding({
     <section className={`ending ending-${ending.tier} py-10 text-center`} onClick={() => !seq.done && seq.skip()}>
       <Appear step={at.title} seq={seq}>
         <p className="text-xs tracking-widest text-ash">
-          {view.runNo}번째 판 · <span className={TIER_CLASS[ending.tier]}>{TIER_LABEL[ending.tier]}</span>
+          <span className={TIER_CLASS[ending.tier]}>{TIER_LABEL[ending.tier]}</span>
           {ending.first && <span className="ml-2 text-amber">처음 닿았다</span>}
         </p>
         <h2 className="title-card ending-title mt-2 font-serif-kr text-3xl font-bold sm:text-4xl">{ending.title}</h2>
