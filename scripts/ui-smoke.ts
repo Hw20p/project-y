@@ -183,7 +183,7 @@ try {
     renderFor('p1')
 
     assert.ok(sawGrowth, '밤 장면에 체력 +1 성장 표시가 나왔다')
-    // 8명 파티: 작은 카드로 줄어들고 접을 수 있다 (4명까지는 큰 카드 그대로)
+    // 8명 파티: 작은 카드로 줄어들고 접을 수 있다. 2~4명은 큰 카드 그대로이고 접을 수 있으며, 혼자는 카드 없이 한 줄이라 접기가 없다
     {
       const big = createScenarioGame(sc, { seed: 1, players: partyOf(8), vars: { seat: 'b', stairs: 11 } })
       const bigClient = {
@@ -204,8 +204,14 @@ try {
       assert.match(html8, /파티 8명/)
       assert.match(html8, /접기/)
       assert.equal((html8.match(/aria-label="파티원"/g) ?? []).length, 1)
-      const html2 = render(h(FxProvider as never, null, h(ScenarioScreen as never, { client: { ...bigClient, view: viewForScenario(sc, createScenarioGame(sc, { seed: 1, players: partyOf(4), vars: { seat: 'b', stairs: 11 } }), 'p1') }, onExit: () => {}, exitLabel: '나가기' })))
-      assert.ok(!html2.includes('접기'), '4명까지는 접기 버튼이 없다')
+      const renderN = (n: number) =>
+        render(h(FxProvider as never, null, h(ScenarioScreen as never, { client: { ...bigClient, view: viewForScenario(sc, createScenarioGame(sc, { seed: 1, players: partyOf(n), vars: { seat: 'b', stairs: 11 } }), 'p1') }, onExit: () => {}, exitLabel: '나가기' })))
+      const html4 = renderN(4)
+      assert.match(html4, /파티 4명/)
+      assert.match(html4, /접기/, '2명부터는 파티를 접을 수 있다')
+      const html1 = renderN(1)
+      assert.ok(!html1.includes('접기'), '혼자일 때는 접기 버튼이 없다')
+      assert.equal((html1.match(/aria-label="파티원"/g) ?? []).length, 0, '혼자일 때는 파티원 목록 대신 한 줄이다')
     }
 
     // 내 개인 행동은 끝났는데 다른 사람을 기다리는 화면: B7에는 이어지는 개인 단계가 없어서 시험용 밤으로 만든다
