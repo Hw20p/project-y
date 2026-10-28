@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { stripFx } from '../../scenario/fx.ts'
 import { needMoreChoiceIds, type ScenarioView } from '../../scenario/view.ts'
+import { Backdrop } from '../backdrop/Backdrop.tsx'
 import { ReadingContext, type ScenarioClient } from '../client.ts'
 import { FxSettingsMenu, playSfx, useMusic, type BgmId } from '../fx.tsx'
 import { DistortContext, distortAt } from '../Narration.tsx'
@@ -21,10 +22,11 @@ function TimeChip({ view, night }: { view: ScenarioView; night: boolean }) {
   if (!view.timeOfDay) return null
   return (
     <span
-      className={`rounded border px-2 py-0.5 ${night ? 'border-glow/40 bg-glow/10 text-glow' : 'border-amber/40 bg-amber/10 text-amber'}`}
+      className={`whitespace-nowrap rounded border px-2 py-0.5 ${night ? 'border-glow/40 bg-glow/10 text-glow' : 'border-amber/40 bg-amber/10 text-amber'}`}
     >
       <span aria-hidden>{night ? '☾' : '☀'} </span>
-      {view.timeOfDay.day}일째 {night ? '밤' : '낮'}
+      {view.timeOfDay.day !== null && `${view.timeOfDay.day}일째 `}
+      {night ? '밤' : '낮'}
     </span>
   )
 }
@@ -176,6 +178,14 @@ export function ScenarioScreen({
   return (
     <ReadingContext value={setReading}>
      <DistortContext value={distort}>
+      {view.backdrop && (
+        // 배경 그림: 이야기 속 장소 × 낮밤 × 이야기가 정한 어둠(정전). 엔딩에서는 밤 모습으로 가라앉는다.
+        <Backdrop
+          scenarioId={view.scenario.id}
+          place={view.backdrop.place}
+          look={view.backdrop.dark ? 'dark' : night || ended ? 'night' : 'day'}
+        />
+      )}
       {view.timeOfDay && <div className="night-tint" style={{ opacity: night && !ended ? 1 : 0 }} aria-hidden />}
       {/* 엔딩에서는 붉은 가장자리를 등급별 연출(EndingBackdrop)이 대신한다 */}
       <div className="vignette" style={{ opacity: ended ? 0 : danger }} aria-hidden />
@@ -189,6 +199,13 @@ export function ScenarioScreen({
       {view.meter && !ended && (
         // 새벽이 가까울수록 화면 아래에서 희끄무레한 빛이 차오른다 (정산이 다가온다)
         <div className="dawn-glow" style={{ opacity: meterLevel / view.meter.max }} aria-hidden />
+      )}
+      {!ended && (
+        // 배경 안개: 낮에는 따뜻한 먼지빛이, 밤에는 차가운 푸른 안개가 천천히 흐른다 (엔딩에서는 엔딩 연출이 대신한다)
+        <>
+          <div className="ambient-fog" style={{ opacity: night ? 0 : 1 }} aria-hidden />
+          <div className="ambient-fog ambient-fog-night" style={{ opacity: night ? 1 : 0 }} aria-hidden />
+        </>
       )}
       {blink > 0 && <div key={blink} className="light-blink" aria-hidden />}
       {impact && <div key={impact.id} className={`impact impact-${impact.kind}`} aria-hidden />}
@@ -233,9 +250,9 @@ export function ScenarioScreen({
           )}
           {/* 시간대와 조명은 넓은 화면에서는 이 막대에 고정해 두고, 좁은 화면에서는 아래 머리글에 둔다 */}
           {!ended && (
-            <div className="ml-auto hidden items-center gap-1.5 text-xs sm:flex">
+            <div className="ml-auto hidden shrink-0 items-center gap-1.5 whitespace-nowrap text-xs sm:flex">
               <TimeChip view={view} night={night} />
-              <LightMeter view={view} />
+              <LightMeter view={view} compact />
             </div>
           )}
           <div className={ended ? 'ml-auto' : ''}>
@@ -245,7 +262,7 @@ export function ScenarioScreen({
       </nav>
 
       <div
-        className={`mx-auto max-w-2xl px-4 pb-16 pt-3 ${impact?.kind === 'death' ? 'shake' : ''} ${darkness > 0 ? 'light-glow' : ''}`}
+        className={`relative z-[1] mx-auto max-w-2xl px-4 pb-16 pt-3 ${impact?.kind === 'death' ? 'shake' : ''} ${darkness > 0 ? 'light-glow' : ''}`}
         style={darkness > 0 ? ({ '--glow': darkness } as React.CSSProperties) : undefined}
       >
 
@@ -266,6 +283,13 @@ export function ScenarioScreen({
                 <span className="tracking-widest text-fog">{roomCode}</span>
               </span>
             </div>
+            {/* 넓은 화면: 시간대와 칸은 위쪽 고정 막대에 있고, 시계의 문장(오염·조명 상태)은 여기에 보인다 */}
+            {(view.light || view.meter) && (
+              <p className={`mt-1 hidden text-xs sm:block ${view.light && view.light.max - view.light.level <= 1 ? 'fx-flicker text-loss' : 'text-ash'}`}>
+                {view.light?.name ? `${view.light.name}: ` : ''}
+                {view.clockLabel}
+              </p>
+            )}
             <div className="mt-2 flex items-center justify-between gap-3 text-xs sm:hidden">
               <span className="flex flex-wrap items-center gap-1.5">
                 <TimeChip view={view} night={night} />
@@ -297,17 +321,20 @@ export function ScenarioScreen({
         )}
 
         <main className="mt-2">
-          {view.phase === 'story' && view.scene && <StoryScene key={sceneKey} view={view} send={send} onImpact={onImpact} />}
-          {(view.phase === 'vote' || view.phase === 'split') && view.scene && (
-            <ChoiceScene key={sceneKey} view={view} send={send} reading={reading} />
-          )}
-          {view.phase === 'personal' && view.scene && (
-            <PersonalScene key={sceneKey} view={view} send={send} reading={reading} />
-          )}
-          {view.phase === 'result' && view.result && (
-            <ScenarioResultPanel key={resultKey} view={view} send={send} onImpact={onImpact} />
-          )}
-          {ended && view.ending && <ScenarioEnding client={client} onExit={onExit} exitLabel={exitLabel} />}
+          {/* 장면이 바뀔 때마다 부드럽게 나타난다 (키가 바뀌면 다시 그려진다) */}
+          <div key={ended ? 'ended' : view.phase === 'result' ? resultKey : sceneKey} className="scene-in">
+            {view.phase === 'story' && view.scene && <StoryScene key={sceneKey} view={view} send={send} onImpact={onImpact} />}
+            {(view.phase === 'vote' || view.phase === 'split') && view.scene && (
+              <ChoiceScene key={sceneKey} view={view} send={send} reading={reading} />
+            )}
+            {view.phase === 'personal' && view.scene && (
+              <PersonalScene key={sceneKey} view={view} send={send} reading={reading} />
+            )}
+            {view.phase === 'result' && view.result && (
+              <ScenarioResultPanel key={resultKey} view={view} send={send} onImpact={onImpact} />
+            )}
+            {ended && view.ending && <ScenarioEnding client={client} onExit={onExit} exitLabel={exitLabel} />}
+          </div>
         </main>
 
         {!ended && (

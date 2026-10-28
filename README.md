@@ -38,6 +38,8 @@ src/
   ui/        React 화면: 시작 화면(App), 연출(Narration, fx), 브라우저 저장(storage), 화면이 서버를 쓰는 규격(client)
     room/      방: 대기실(Lobby, LobbyMap)과 서버 접속(useRemoteGame)
     scenario/  장면·결과·엔딩·파티 스텟·정보 패널
+    backdrop/  장면 뒤의 배경 그림: 장소 × 낮밤 × 정전(Backdrop), 그림 파일 찾기(files). 그림 파일이 없는 장소는 기존 배경만 보인다
+  assets/backdrops/  배경 그림을 넣는 곳 (<시나리오 id>/<장소>.webp). 넣기만 하면 붙는다 — README.md에 장소 목록과 규격이 있다
   assets/audio/  소리 파일을 넣는 곳 (sfx/·bgm/). 파일 이름이 소리 id이고, 넣기만 하면 붙는다 — README.md에 목록이 있다 (엔진은 ui/audio.ts)
     dev/       개발 전용 화면(전수 탐색기·분기 그래프). 개발 서버의 시작 화면에만 버튼이 보이고 빌드에는 들어가지 않는다
 server/      WebSocket 서버 (index.ts 연결, room.ts 방 로직, main.ts 실행)

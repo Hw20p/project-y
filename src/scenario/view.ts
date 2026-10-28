@@ -151,8 +151,16 @@ export interface ScenarioView {
   phase: RunPhase
   me: { id: string; name: string; hurt: boolean; panic: boolean; stats: Stats; items: ItemDef[]; facts: HintDef[] }
   players: PlayerView[]
-  /** 며칠째 낮/밤인지 (시나리오가 장면에 시간대를 정해 둔 경우에만) */
-  timeOfDay: { day: number; period: 'day' | 'night' } | null
+  /**
+   * 며칠째 낮/밤인지 (시나리오가 장면에 시간대를 정해 둔 경우에만). 낮이 한 번도 없는 시나리오(하룻밤 이야기)는 날이 가지 않으므로
+   * `day`가 null이고 화면은 "n일째" 없이 "밤"만 보인다.
+   */
+  timeOfDay: { day: number | null; period: 'day' | 'night' } | null
+  /**
+   * 배경 그림: 지금 장면의 장소(`Node.place`)와, 이야기가 정한 어둠(`Node.dark`, 정전 등)이 켜져 있는지.
+   * 낮밤은 `timeOfDay`가 말한다. 장소가 한 번도 정해지지 않은 시나리오는 null이다 (배경 그림이 없다).
+   */
+  backdrop: { place: string; dark: boolean } | null
   /** 정보 패널(대상 정보)용. 대상 자료는 이번 판에서 파티 누구라도 알아낸 단서에 따라 열린다. */
   entity: EntityView
   /** 이번 판에서 파티 누구라도 알아낸 단서 전부 (얻은 사람 이름 포함). 알아낸 순서대로. */
@@ -379,7 +387,20 @@ export function viewForScenario(sc: Scenario, g: ScenarioGame, playerId: string)
       if (period === 'night' && p === 'day') day++
       period = p
     }
-    timeOfDay = { day, period }
+    timeOfDay = { day: sc.nodes.some((n) => n.period === 'day') ? day : null, period }
+  }
+
+  // ───── 배경: 지나온 장면을 따라가며 장소와 어둠(정전)을 이어받는다 (비운 장면은 앞의 것 그대로)
+  let backdrop: ScenarioView['backdrop'] = null
+  {
+    let place: string | null = null
+    let dark = false
+    for (const id of run.visited) {
+      const n = sc.nodes.find((x) => x.id === id)
+      if (n?.place !== undefined) place = n.place
+      if (n?.dark !== undefined) dark = n.dark
+    }
+    if (place !== null) backdrop = { place, dark }
   }
 
   const endingNodes = sc.nodes.filter((n) => n.kind === 'ending')
@@ -406,6 +427,7 @@ export function viewForScenario(sc: Scenario, g: ScenarioGame, playerId: string)
         ? { name: sc.clock.meter, max: clockStep(sc.deadline.time), level: Math.min(clockStep(run.time), clockStep(sc.deadline.time)) }
         : null,
     timeOfDay,
+    backdrop,
     phase: run.phase,
     me: {
       id: me.id,

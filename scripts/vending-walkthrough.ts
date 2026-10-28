@@ -471,7 +471,7 @@ function trade(g: ScenarioGame, put: string, press: string, change: string): Sce
   h = voteAll(settle(h), 'item-coin')
   assert.equal(h.run.nodeId, 'item-right')
   assert.match(text(h), /그다음 차례는 낡은 동전이다/)
-  assert.match(text(h), /맞다\. 오늘 밤 이 기계가 받는 것은 낡은 동전이다/)
+  assert.match(text(h), /맞다\. 오늘 이 기계가 받는 것은 낡은 동전이다/)
 
   // 의도한 풀이는 사슬의 모든 장면을 거친다
   const solved = drive(start(2, r), 'trade-item', r)

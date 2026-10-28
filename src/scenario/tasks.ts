@@ -127,6 +127,8 @@ export interface TaskDef {
   board: { text: string; facts: string[]; answer: Text }
   /** 이 과제의 장면들이 낮인지 밤인지 (비우면 앞 장면의 시간대를 이어받는다) */
   period?: 'day' | 'night'
+  /** 이 과제의 장면들이 일어나는 장소 = 배경 그림 (`NodeBase.place`). 과제 하나가 장소 하나다. */
+  place?: string
   /**
    * 오답이나 패스를 하면 하루가 지나 밤이 온다. 이 밤(개인 행동)에 이 과제만의 선택지(단서·아이템)를 둔다.
    * 시나리오 공통의 밤 선택지(`TasksSpec.nightCommon`, 스텟 올리기·휴식)가 뒤에 함께 나온다. 비워 두면 밤 없이 바로 조사로 돌아간다.
@@ -566,6 +568,7 @@ export function buildTasks(spec: TasksSpec): TasksBuilt {
     }
 
     if (task.period) for (const node of nodes.slice(firstNode)) node.period ??= task.period
+    if (task.place) for (const node of nodes.slice(firstNode)) node.place ??= task.place
   }
 
   const questions: QuestionDef[] = tasks.map((task) => ({

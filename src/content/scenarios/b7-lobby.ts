@@ -499,6 +499,7 @@ const lift: TaskDef = {
   id: 'lift',
   title: '엘리베이터',
   period: 'day',
+  place: 'lift',
   intro:
     '닫힌 엘리베이터 문 앞에 모였다. 문은 거울처럼 매끈하고, 층 표시등은 B6에서 멈춰 있다. 패널에는 내려가는 층 버튼뿐이다.\n이 문을 어떻게 해야 위로 올라가는지 알아내야 한다. 문은 열린 채 일행을 기다리고 있으니, 그 앞에서 조심스럽게 시험해 볼 수 있다.',
   probes: [
@@ -766,6 +767,7 @@ const sofa: TaskDef = {
   id: 'sofa',
   title: '소파',
   period: 'day',
+  place: 'sofa',
   intro:
     '소파 세 개가 같은 방향을 보고 있다. 오래되었지만 먼지는 없다. 이 중 하나에는 방금까지 누가 앉았던 온기가 남아 있다고 한다.\n로비 곳곳에 쪽지가 흩어져 있다. 누구의 글씨인지 알 수 없다. 어느 쪽지를 믿어야 할까.',
   probes: [
@@ -1007,6 +1009,7 @@ const stairs: TaskDef = {
   id: 'stairs',
   title: '계단',
   period: 'day',
+  place: 'stairs',
   intro:
     '계단 입구에 모였다. 난간 기둥이 어둠 속으로 이어진다. 계단 아래에서 누군가 천천히 숫자를 센다. [[whisper|하나… 둘… 셋…]]\n몇 칸을 내려가야 끝에 닿는지 알아내야 한다.',
   probes: [
@@ -1366,6 +1369,7 @@ const STORY_NODES: Node[] = [
   {
     id: 'arrive',
     period: 'day',
+    place: 'lobby',
     kind: 'story',
     title: '도착',
     text: '엘리베이터가 층 표시 없이 멈췄다. 문이 열리자 은은한 조명 아래 카펫이 깔린 작은 로비가 나타났다. 접수대, 소파 세 개, 그리고 아래로 내려가는 계단. 뒤에서 문이 [[whisper|조용히]] 닫혔다.',
@@ -1414,6 +1418,7 @@ const STORY_NODES: Node[] = [
   {
     id: 'event-footsteps',
     period: 'night',
+    place: 'lobby',
     kind: 'vote',
     title: '발소리',
     text: '소파 쪽에서 발소리가 났다. 소파에서 접수대로, 접수대에서 엘리베이터 쪽으로. 발소리는 일행 곁을 지나며 한 사람씩 세는 것처럼 멈칫했다.',
@@ -1451,6 +1456,7 @@ const STORY_NODES: Node[] = [
   {
     id: 'phone-call',
     period: 'night',
+    place: 'lobby',
     kind: 'vote',
     title: '접수대 전화',
     text: '그때, 접수대에서 전화벨이 울리기 시작했다. 낮고 느린 벨소리가 빈 로비를 한 바퀴 돌아 나왔다.\n수화기를 들자 숨 쉬는 소리가 들리더니, 정중한 목소리가 물었다. [[whisper|“거기, 몇 분이세요?”]] 일행이 서로를 바라보았다.',
@@ -1487,6 +1493,7 @@ const STORY_NODES: Node[] = [
   {
     id: 'night',
     period: 'night',
+    place: 'lobby',
     kind: 'personal',
     title: '로비의 밤',
     text: [
@@ -1500,6 +1507,7 @@ const STORY_NODES: Node[] = [
   // ───── 마지막 선택 (세 과제를 모두 푼 뒤)
   {
     id: 'gather',
+    place: 'lobby',
     kind: 'vote',
     title: '이제 어디로',
     text: [
@@ -1531,6 +1539,7 @@ const STORY_NODES: Node[] = [
   // ───── 엘리베이터
   {
     id: 'lift',
+    place: 'lift',
     kind: 'split',
     title: '엘리베이터 앞',
     text: '엘리베이터 문이 열려 있다. 안쪽 거울에 일행의 모습이 비친다. 소파 쪽에서 낮은 숨소리가 들린다. 문이 닫히기 전에 각자 무엇을 할지 정해야 한다.',
@@ -1605,6 +1614,7 @@ const STORY_NODES: Node[] = [
   // ───── 계단
   {
     id: 'stairs-vote',
+    place: 'stairs',
     kind: 'vote',
     title: '계단 아래',
     text: '계단 입구에 모였다. 아래는 어둠이다. 알아낸 대로, 몇 칸을 내려가야 끝에 닿을까. 모두가 같은 칸에서 멈춰야 한다.',
@@ -1627,6 +1637,7 @@ const STORY_NODES: Node[] = [
   },
   {
     id: 'sign-story',
+    place: 'lobby',
     kind: 'story',
     title: '서명',
     text: '펜을 집어 이름을 적었다. 잉크는 종이에 닿자 천천히 번졌다.\n서명한 사람의 글씨체가 아주 조금씩 방명록의 다른 글씨와 닮아 가기 시작했다. 그래도 한 사람씩 차례로 서명했다. 얌전히 기다리면 괜찮을 거라고, 서로에게 말하면서.',

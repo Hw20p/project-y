@@ -726,3 +726,153 @@ body::after {
     animation: none;
   }
 }
+
+/* ───────── 플레이 화면의 분위기 (장면 전환·배경 안개·정신력·버튼) ─────────
+ * 규칙과 무관한 장식이다. 읽는 데 방해되지 않도록 아주 옅게 쓰고, 클릭을 가로채지 않는다. */
+
+/* 배경 그림 (Backdrop.tsx): 장면 뒤에 깔린다. 낮 그림을 밤·정전에서는 어둡고 푸르게 보정하고, 글자가 읽히게 어두운 막을 덮는다. */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.backdrop-place {
+  position: absolute;
+  inset: 0;
+  animation: backdrop-in 1s ease-out both;
+}
+.backdrop-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: filter 1.6s ease;
+}
+.look-day {
+  filter: saturate(0.9) brightness(0.95);
+}
+.look-night {
+  filter: brightness(0.5) saturate(0.7) hue-rotate(-8deg);
+}
+.look-dark {
+  filter: brightness(0.36) saturate(0.55);
+}
+/* 밤 그림 파일이 따로 있으면 보정하지 않는다 (정전은 조금만 어둡게) */
+.look-file.look-night {
+  filter: none;
+}
+.look-file.look-dark {
+  filter: brightness(0.75);
+}
+.backdrop-scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to bottom, rgb(6 5 6 / 0.35), rgb(6 5 6 / 0.55)),
+    radial-gradient(ellipse 38% 120% at 50% 50%, rgb(6 5 6 / 0.55), transparent 100%);
+}
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 장면이 바뀔 때 부드럽게 나타난다 */
+.scene-in {
+  animation: scene-in 0.5s ease-out both;
+}
+@keyframes scene-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 배경 안개: 낮에는 따뜻한 먼지빛, 밤에는 차가운 푸른 안개. 두 겹이 서로 다른 속도로 천천히 흐르고, 낮밤이 바뀌면 서서히 바뀐다. */
+.ambient-fog {
+  position: fixed;
+  inset: -8%;
+  z-index: 17;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 55% 38% at 14% 76%, rgb(120 92 70 / 0.34), transparent 72%),
+    radial-gradient(ellipse 60% 40% at 84% 24%, rgb(120 92 70 / 0.28), transparent 72%),
+    radial-gradient(ellipse 50% 34% at 52% 52%, rgb(120 92 70 / 0.18), transparent 72%);
+  animation: ambient-drift 32s ease-in-out infinite alternate;
+  transition: opacity 1.8s ease;
+}
+.ambient-fog-night {
+  background:
+    radial-gradient(ellipse 55% 38% at 18% 70%, rgb(110 140 215 / 0.36), transparent 72%),
+    radial-gradient(ellipse 60% 40% at 80% 30%, rgb(130 160 230 / 0.28), transparent 72%),
+    radial-gradient(ellipse 50% 34% at 48% 50%, rgb(100 130 200 / 0.18), transparent 72%);
+  animation-duration: 44s;
+  animation-direction: alternate-reverse;
+}
+/* 안개는 좌우로만이 아니라 위아래로도 흐르고 조금씩 부풀어, 움직이는 것이 눈에 띈다 */
+@keyframes ambient-drift {
+  from {
+    transform: translate(-6%, 3%) scale(1);
+  }
+  to {
+    transform: translate(6%, -4%) scale(1.12);
+  }
+}
+
+/* 정신력이 바닥에 가까운 막대는 불안하게 맥박친다 */
+.sanity-low {
+  animation: sanity-pulse 1.4s ease-in-out infinite;
+}
+@keyframes sanity-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* 장면의 버튼(선택지·계속): 위에 올리면 은은하게 빛나고, 누르면 살짝 눌린다 */
+main button:not(:disabled) {
+  transition:
+    box-shadow 0.25s ease,
+    border-color 0.25s ease,
+    background-color 0.25s ease,
+    color 0.25s ease,
+    transform 0.1s ease;
+}
+main button:not(:disabled):hover {
+  box-shadow: 0 0 18px -6px rgb(163 180 198 / 0.45);
+}
+main button:not(:disabled):active {
+  transform: scale(0.992);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scene-in,
+  .ambient-fog,
+  .sanity-low,
+  .backdrop-place {
+    animation: none;
+  }
+  .backdrop-art {
+    transition: none;
+  }
+  .ambient-fog {
+    transition: none;
+  }
+  main button:not(:disabled):active {
+    transform: none;
+  }
+}

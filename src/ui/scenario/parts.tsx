@@ -68,9 +68,10 @@ export function Changes({ changes, view }: { changes: Change[]; view: ScenarioVi
  * 시계 표시. 시계가 조명인 시나리오는 남은 조명을 막대로 보이고(어두워질수록 붉어지고, 거의 꺼지면 깜빡인다) 상태를 말로 적는다.
  * 조명에 이름이 있으면("오염") 줄어드는 대신 차오르는 막대가 된다. 조명이 아닌 막대(`meter`)는 이름이 붙은 푸른 막대다. 아니면 시계 이름만 보인다.
  */
-export function LightMeter({ view }: { view: ScenarioView }) {
+export function LightMeter({ view, compact = false }: { view: ScenarioView; compact?: boolean }) {
   const gauge = view.light ?? view.meter
   if (!gauge) {
+    if (compact) return null // 좁은 자리에서는 칸이 없는 시계의 문구를 생략한다 (문구는 머리글에 있다)
     return <span className="rounded border border-amber/30 px-2 py-0.5 text-amber">{view.clockLabel}</span>
   }
   const meter = view.light ? null : view.meter
@@ -83,8 +84,8 @@ export function LightMeter({ view }: { view: ScenarioView }) {
   const calm = name ? { border: 'border-glow/40 text-glow', bar: 'bg-glow' } : { border: 'border-amber/30 text-amber', bar: 'bg-amber' }
   return (
     <span
-      className={`inline-flex items-center gap-2 rounded border px-2 py-0.5 ${low ? 'border-loss/40 text-loss' : calm.border}`}
-      title={name ? `${name} ${shown}/${max}` : `남은 조명 ${left}/${max}`}
+      className={`inline-flex items-center gap-2 whitespace-nowrap rounded border px-2 py-0.5 ${low ? 'border-loss/40 text-loss' : calm.border}`}
+      title={`${name ? `${name} ${shown}/${max}` : `남은 조명 ${left}/${max}`} · ${view.clockLabel}`}
     >
       {name && <span className="text-[11px] opacity-80">{name}</span>}
       <span className="flex gap-0.5" aria-hidden>
@@ -92,7 +93,7 @@ export function LightMeter({ view }: { view: ScenarioView }) {
           <span key={i} className={`h-3 w-1.5 rounded-sm ${i < shown ? (low ? 'bg-loss' : calm.bar) : 'bg-edge'}`} />
         ))}
       </span>
-      <span className={left <= 1 ? 'fx-flicker' : ''}>{view.clockLabel}</span>
+      {!compact && <span className={left <= 1 ? 'fx-flicker' : ''}>{view.clockLabel}</span>}
     </span>
   )
 }
@@ -241,7 +242,7 @@ export function ScenarioParty({
             <span className="text-[11px] text-ash">정신력</span>
             <span className="h-1.5 w-16 overflow-hidden rounded bg-ink">
               <span
-                className="block h-full rounded transition-all duration-500"
+                className={`block h-full rounded transition-all duration-500 ${pct <= 30 ? 'sanity-low' : ''}`}
                 style={{ width: `${pct}%`, background: pct <= 30 ? '#c0524a' : '#8a93de' }}
               />
             </span>
@@ -304,7 +305,7 @@ export function ScenarioParty({
                 <span className="w-9 shrink-0 text-[10px] text-ash">정신력</span>
                 <div className="h-1.5 flex-1 overflow-hidden rounded bg-ink">
                   <div
-                    className="h-full rounded transition-all duration-500"
+                    className={`h-full rounded transition-all duration-500 ${pct <= 30 ? 'sanity-low' : ''}`}
                     style={{ width: `${pct}%`, background: pct <= 30 ? '#c0524a' : '#8a93de' }}
                   />
                 </div>
