@@ -2,8 +2,9 @@ import type { EndingTier } from '../../scenario/types.ts'
 import type { ScenarioClient } from '../client.ts'
 import { useEffect, useMemo } from 'react'
 import { playSfx } from '../fx.tsx'
-import { Appear, Beats, beatSteps, DistortContext, splitBeats, useAdvanceKey, useSequence, useSteps } from '../Narration.tsx'
+import { Appear, Beats, beatSteps, DistortContext, splitBeats, useAdvanceKey, useSequence, useSteps, type StepSpec } from '../Narration.tsx'
 import { ENDING_DISTORT } from './EndingFx.tsx'
+import { EndingParty } from './EndingParty.tsx'
 
 const TIER_LABEL: Record<EndingTier, string> = { true: '진엔딩', good: '좋은 엔딩', neutral: '보통 엔딩', bad: '나쁜 엔딩' }
 const TIER_CLASS: Record<EndingTier, string> = {
@@ -27,9 +28,10 @@ export function ScenarioEnding({
   const ending = view.ending!
 
   const beats = useMemo(() => splitBeats(ending.text), [ending.text])
+  const fx = ending.fx
   const { steps, at } = useSteps(
-    [['title', 0, 1600], ...beatSteps(beats), ['record', 0, 800]],
-    [ending.id],
+    [['title', 0, 1600], ...(fx ? [['party', 0, 900] as StepSpec] : []), ...beatSteps(beats), ['record', 0, 800]],
+    [ending.id, fx],
   )
   const seq = useSequence(steps)
   useAdvanceKey(seq, client.retry)
@@ -50,6 +52,13 @@ export function ScenarioEnding({
         </p>
         <h2 className="title-card ending-title mt-2 font-serif-kr text-3xl font-bold sm:text-4xl">{ending.title}</h2>
       </Appear>
+
+      {/* 이 엔딩에만 붙은 연출: 이야기 속 소재가 파티 카드로 넘어온다 */}
+      {fx && (
+        <Appear step={at.party} seq={seq}>
+          <EndingParty fx={fx} players={view.players} />
+        </Appear>
+      )}
 
       {/* 엔딩 본문은 파티원의 정신력과 상관없이 엔딩 등급이 정한 모습으로 흐른다 */}
       <DistortContext value={ENDING_DISTORT[ending.tier]}>

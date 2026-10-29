@@ -1,6 +1,6 @@
 // 연출 설정(속도·소리)과 소리 연결. 설정은 브라우저에 저장되고 화면 어디서나 `useFx()`로 읽는다. 소리 자체는 audio.ts에 있다.
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { configureAudio, setMusic, type BgmId } from './audio.ts'
+import { configureAudio, setMood, setMusic, type BgmId } from './audio.ts'
 
 export { playSfx, type BgmId, type SfxId } from './audio.ts'
 
@@ -14,10 +14,12 @@ interface FxSettings {
   volume: number
   /** 글이 번지고 일그러지는 연출 (읽기 힘들면 끈다) */
   warp: boolean
+  /** 조명이 꺼지기 직전에 화면이 커서(손가락) 주변만 보이는 연출 (읽기 힘들면 끈다) */
+  torch: boolean
 }
 
 const KEY = 'project-y:fx'
-const DEFAULTS: FxSettings = { speed: 1, sound: false, volume: 0.7, warp: true }
+const DEFAULTS: FxSettings = { speed: 1, sound: false, volume: 0.7, warp: true, torch: true }
 
 function load(): FxSettings {
   try {
@@ -35,6 +37,7 @@ interface FxApi extends FxSettings {
   setSound: (on: boolean) => void
   setVolume: (v: number) => void
   setWarp: (on: boolean) => void
+  setTorch: (on: boolean) => void
 }
 
 const FxContext = createContext<FxApi | null>(null)
@@ -55,9 +58,10 @@ export function FxProvider({ children }: { children: ReactNode }) {
   const setSound = useCallback((sound: boolean) => setSettings((s) => ({ ...s, sound })), [])
   const setVolume = useCallback((volume: number) => setSettings((s) => ({ ...s, volume })), [])
   const setWarp = useCallback((warp: boolean) => setSettings((s) => ({ ...s, warp })), [])
+  const setTorch = useCallback((torch: boolean) => setSettings((s) => ({ ...s, torch })), [])
   const api = useMemo(
-    () => ({ ...settings, setSpeed, setSound, setVolume, setWarp }),
-    [settings, setSpeed, setSound, setVolume, setWarp],
+    () => ({ ...settings, setSpeed, setSound, setVolume, setWarp, setTorch }),
+    [settings, setSpeed, setSound, setVolume, setWarp, setTorch],
   )
 
   return <FxContext value={api}>{children}</FxContext>
@@ -69,6 +73,17 @@ export function useMusic(id: BgmId | null): void {
     setMusic(id)
     return () => setMusic(null)
   }, [id])
+}
+
+/**
+ * 지금 화면의 분위기(조명이 어두운 정도 0~1, 내 정신력)를 소리에 알린다. 합성 배경음의 음정·험, 모든 소리의 먹먹함, 심장 박동이 따라가고,
+ * 화면이 사라지면 원래대로 돌아간다.
+ */
+export function useMood(darkness: number, sanity: number): void {
+  useEffect(() => {
+    setMood({ darkness, sanity })
+  }, [darkness, sanity])
+  useEffect(() => () => setMood({ darkness: 0, sanity: 10 }), [])
 }
 
 export function useFx(): FxApi {
@@ -119,7 +134,7 @@ export function FxSettingsMenu() {
 }
 
 export function FxSettingsBar() {
-  const { speed, sound, volume, warp, setSpeed, setSound, setVolume, setWarp } = useFx()
+  const { speed, sound, volume, warp, torch, setSpeed, setSound, setVolume, setWarp, setTorch } = useFx()
   const order: Speed[] = [1, 2, 0]
   return (
     <div className="flex flex-col items-stretch gap-3 text-xs text-ash">
@@ -148,6 +163,18 @@ export function FxSettingsBar() {
           }`}
         >
           {warp ? '켬' : '끔'}
+        </button>
+      </span>
+      <span className="flex items-center justify-between gap-2" title="조명이 꺼지기 직전, 커서 주변만 보이는 연출">
+        <span>손전등</span>
+        <button
+          type="button"
+          onClick={() => setTorch(!torch)}
+          className={`rounded border px-3 py-1.5 sm:px-2 sm:py-0.5 ${
+            torch ? 'border-glow/40 text-glow' : 'border-edge hover:text-fog'
+          }`}
+        >
+          {torch ? '켬' : '끔'}
         </button>
       </span>
       <span className="flex items-center justify-between gap-2">

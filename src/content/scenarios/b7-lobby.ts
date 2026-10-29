@@ -1668,6 +1668,7 @@ const STORY_NODES: Node[] = [
     id: 'bad-end',
     kind: 'ending',
     tier: 'bad',
+    fx: 'phantom',
     title: '한 명이 더',
     text: [
       {
@@ -1777,7 +1778,7 @@ export const b7Lobby: Scenario = {
   items: [
     { id: 'key', name: '점검 열쇠', text: '접수대 서랍에서 찾은 작은 열쇠. 엘리베이터 패널 뚜껑에 맞을 것 같다.' },
     { id: 'loupe', name: '돋보기', text: '손바닥만 한 돋보기. 잉크의 결까지 보인다.' },
-    { id: 'torch', name: '청동 손전등', text: '빛이 닿는 곳은 계단이 계단처럼 보인다.' },
+    { id: 'torch', name: '청동 손전등', text: '빛이 닿는 곳은 계단이 계단처럼 보인다.', light: true },
   ],
   facts: [
     // 어느 판에서나 같은 사실

@@ -1,5 +1,6 @@
 // 시나리오 모드의 콘텐츠 형식. 대상 하나가 "장면 그래프"이고, 판정에 난수가 없다.
 // 같은 선택이면 항상 같은 결과이므로 모든 길을 도구로 검증할 수 있다. (판마다 바뀌는 것은 시드로 정해지는 `vars`뿐이다.)
+import type { EndingFxName } from './fx.ts'
 import type { StatKey } from './stats.ts'
 
 /** 아이템: 이름과 설명. 가진 사람이 조건(`item`)으로 길을 연다. */
@@ -7,6 +8,8 @@ export interface ItemDef {
   id: string
   name: string
   text: string
+  /** true면 빛을 비추는 도구다: 조명이 꺼지기 직전의 어둠에서 가진 사람의 손전등 빛이 넓어진다 (화면 연출뿐, 규칙에는 영향 없음) */
+  light?: boolean
 }
 
 /** 사실(단서): 알아낸 사람이 있으면 파티 전원에게 이름과 함께 보인다. 판이 끝나면 사라진다. */
@@ -322,6 +325,8 @@ export interface EndingNode extends NodeBase {
   kind: 'ending'
   text: Text
   tier: EndingTier
+  /** 이 엔딩에만 붙는 화면 연출 (등급별 배경에 더해진다). 규칙과 무관하다. */
+  fx?: EndingFxName
 }
 
 export type Node = StoryNode | VoteNode | SplitNode | PersonalNode | EndingNode

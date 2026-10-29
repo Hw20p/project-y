@@ -207,6 +207,13 @@ function partyTag(
 const COMPACT_FROM = 5
 
 /**
+ * 정신력이 낮은 파티원의 카드는 **다른 사람의 화면에서도** 불안해 보인다: 3 이하는 이름이 가끔 번지고, 1 이하는 카드가 떨리며 이름이 붉다.
+ * 누가 위험한지 한눈에 보여서 음성으로 이야기할 거리가 된다. 정신을 잃은 사람은 이미 취소선으로 보이므로 그대로 둔다.
+ */
+const unease = (p: ScenarioView['players'][number]): string =>
+  p.panic ? '' : p.stats.sanity <= 1 ? 'card-shaky' : p.stats.sanity <= 3 ? 'card-uneasy' : ''
+
+/**
  * 파티 줄: 이름·입사 배경·스텟(정신력 막대 + 나머지 숫자)·상태. 모두에게 같은 정보가 보인다.
  * 4명까지는 큰 카드, 5명부터는 작은 카드(입사 배경 줄 없음)이고 접으면 한 줄짜리 알약(이름·상태 점·정신력)만 남는다.
  */
@@ -232,8 +239,8 @@ export function ScenarioParty({
     const pct = (p.stats.sanity / STAT_MAX.sanity) * 100
     return (
       <div className="py-2">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded border border-glow/40 bg-glow/5 px-3 py-1.5 text-xs">
-          <span className={`text-sm ${p.panic ? 'text-ash line-through decoration-loss/60' : 'text-bone'}`}>
+        <div className={`flex flex-wrap items-center gap-x-4 gap-y-1 rounded border border-glow/40 bg-glow/5 px-3 py-1.5 text-xs ${unease(p)}`}>
+          <span className={`party-name text-sm ${p.panic ? 'text-ash line-through decoration-loss/60' : 'text-bone'}`}>
             {p.name}
             {p.hurt && <span className="ml-1 text-xs text-loss no-underline" title="부상">✚</span>}
           </span>
@@ -269,10 +276,10 @@ export function ScenarioParty({
               title={`${p.name} · ${tag}`}
               className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${
                 isMe ? 'border-glow/40 bg-glow/5' : 'border-edge bg-panel'
-              }`}
+              } ${unease(p)}`}
             >
               <span className={`h-1.5 w-1.5 shrink-0 rounded-full bg-current ${tone}`} aria-hidden />
-              <span className={p.panic ? 'text-ash line-through decoration-loss/60' : 'text-bone'}>{p.name}</span>
+              <span className={`party-name ${p.panic ? 'text-ash line-through decoration-loss/60' : 'text-bone'}`}>{p.name}</span>
               {p.hurt && <span className="text-[10px] text-loss" title="부상">✚</span>}
               <span className="text-[10px] text-ash">{p.stats.sanity}</span>
             </li>
@@ -291,10 +298,10 @@ export function ScenarioParty({
           return (
             <li
               key={p.id}
-              className={`rounded border ${compact ? 'px-2 py-1.5' : 'px-2.5 py-2'} ${isMe ? 'border-glow/40 bg-glow/5' : 'border-edge bg-panel'}`}
+              className={`rounded border ${compact ? 'px-2 py-1.5' : 'px-2.5 py-2'} ${isMe ? 'border-glow/40 bg-glow/5' : 'border-edge bg-panel'} ${unease(p)}`}
             >
               <div className="flex items-baseline justify-between gap-2">
-                <span className={`truncate text-[13px] sm:text-sm ${p.panic ? 'text-ash line-through decoration-loss/60' : 'text-bone'}`}>
+                <span className={`party-name truncate text-[13px] sm:text-sm ${p.panic ? 'text-ash line-through decoration-loss/60' : 'text-bone'}`}>
                   {p.name}
                   {p.hurt && <span className="ml-1 text-xs text-loss no-underline" title="부상">✚</span>}
                 </span>

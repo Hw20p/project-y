@@ -62,6 +62,8 @@ export interface LobbyModeInfo {
   map: { x: number; y: number }
   /** 시나리오의 종류(생명체·장소·물건) */
   type: string
+  /** 이 방에서 이 대상으로 닿아 본 엔딩 수와 전체 엔딩 수 (대기실 지도의 점에 표시된다. 방이 사라지면 같이 사라진다) */
+  endings?: { reached: number; total: number }
 }
 
 export type ServerMsg =

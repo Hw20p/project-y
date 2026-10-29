@@ -4,9 +4,20 @@
 //   flicker : 깜빡이는 글자 (꺼져 가는 불빛)
 //   loud    : 굵고 환한 글자 (또렷한 한마디)
 //   cold    : 푸르게 식은 글자 (차가운 것)
+//   echo    : 잠시 뒤 같은 글자가 한 번 더 따라 나오는 메아리 (되풀이되는 것, 한 명 더)
+//   mirror  : 뒤집힌 거울상이 뒤따라 붙는 글자 (거울, 비치는 것)
+//   redact  : 검은 줄로 가려진 글자. 정신력이 낮아지면 가려진 것이 읽힌다 (알아서는 안 되는 것)
 
-export const FX_NAMES = ['shake', 'whisper', 'flicker', 'loud', 'cold'] as const
+export const FX_NAMES = ['shake', 'whisper', 'flicker', 'loud', 'cold', 'echo', 'mirror', 'redact'] as const
 export type FxName = (typeof FX_NAMES)[number]
+
+/**
+ * 엔딩 하나에만 붙는 화면 연출 (엔딩 노드의 `fx`). 등급별 배경(피·안개·빛)에 더해, 그 엔딩이 이야기 속 소재를 화면으로 가져온다.
+ *   phantom : 엔딩 화면에 파티 카드가 나오고, 없던 한 명이 서서히 늘어난다 ("인원 N+1")
+ *   tally   : 파티 카드가 진열된 상품처럼 정리되고 정신력이 동전처럼 떨어진다 (정산)
+ */
+export const ENDING_FX_NAMES = ['phantom', 'tally'] as const
+export type EndingFxName = (typeof ENDING_FX_NAMES)[number]
 
 export interface FxSpan {
   start: number

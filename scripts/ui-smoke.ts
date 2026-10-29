@@ -84,6 +84,27 @@ try {
     assert.equal(beats[3].para, true, '줄바꿈은 문단 나눔')
     assert.ok(beats.every((b: { text: string }) => !b.text.includes('[[')), '효과 표기는 글에 남지 않는다')
     console.log('통과: 글자 연출 표기(문장 나눔·효과 범위)')
+
+    // 새 글자 효과(메아리·거울상·검은 줄)와 엔딩 연출 이름은 검증기가 아는 이름이다
+    const { FX_NAMES, ENDING_FX_NAMES } = await vite.ssrLoadModule('/src/scenario/fx.ts')
+    for (const name of ['echo', 'mirror', 'redact']) assert.ok(FX_NAMES.includes(name), `글자 효과 ${name}`)
+    assert.deepEqual([...ENDING_FX_NAMES], ['phantom', 'tally'])
+
+    // 엔딩 하나에만 붙는 연출: 한 명이 더(인원 N+1)와 정산(진열된 칸 번호·정산 완료)
+    const { EndingParty } = await vite.ssrLoadModule('/src/ui/scenario/EndingParty.tsx')
+    const crew = [
+      { id: 'p1', name: '가', archetype: 'researcher', stats: { sanity: 6, body: 1, insight: 4 }, hurt: false, panic: false },
+      { id: 'p2', name: '나', archetype: 'field', stats: { sanity: 2, body: 4, insight: 1 }, hurt: false, panic: false },
+    ]
+    const phantom = render(h(EndingParty as never, { fx: 'phantom', players: crew }))
+    assert.match(phantom, /파티 2명/)
+    assert.match(phantom, /파티 3명/, '없던 한 명이 늘어난 인원이 보인다')
+    assert.match(phantom, /방금 서명했다/)
+    const tally = render(h(EndingParty as never, { fx: 'tally', players: crew }))
+    assert.match(tally, /A-01/)
+    assert.match(tally, /A-02/)
+    assert.match(tally, /정산 완료/)
+    console.log('통과: 엔딩 연출(한 명이 더·정산)')
   }
 
   // 4) 시나리오 화면: B7 로비를 두 사람이 끝까지 진행하며, 장면 종류·개인 단계·결과·엔딩마다 화면이 에러 없이 그려지는지 본다

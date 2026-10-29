@@ -125,6 +125,10 @@ export function LobbyMap({
           const on = m.id === selected
           const focus = m.id === shown?.id
           const left = m.map.x > 60
+          // 닿아 본 엔딩이 많을수록 점이 호박빛으로 번진다. 다 모으면 별이 붙는다.
+          const e = m.endings
+          const ratio = e && e.total > 0 ? e.reached / e.total : 0
+          const complete = !!e && e.total > 0 && e.reached >= e.total
           return (
             <button
               key={m.id}
@@ -141,6 +145,11 @@ export function LobbyMap({
                   className={`relative block rounded-full transition-all ${
                     on ? 'h-3.5 w-3.5 bg-amber' : focus ? 'h-3 w-3 bg-glow' : 'h-2.5 w-2.5 bg-fog group-hover:bg-bone'
                   }`}
+                  style={
+                    ratio > 0
+                      ? { boxShadow: `0 0 ${5 + ratio * 11}px ${1 + ratio * 3}px rgb(209 169 95 / ${0.25 + ratio * 0.5})` }
+                      : undefined
+                  }
                 />
                 {focus && <span className="absolute -inset-1.5 rounded-full border border-bone/40" />}
               </span>
@@ -149,8 +158,18 @@ export function LobbyMap({
                   left ? 'right-full mr-1.5 text-right' : 'left-full ml-1.5'
                 }`}
               >
-                <span className="block text-[10px] leading-3 text-ash">{m.code}</span>
+                <span className="block text-[10px] leading-3 text-ash">
+                  {m.code}
+                  {complete && <span className="ml-1 text-amber" title="모든 엔딩에 닿았다">★</span>}
+                </span>
                 <span className={`block font-serif-kr text-sm leading-4 ${on ? 'text-amber' : focus ? 'text-bone' : 'text-fog'}`}>{m.name}</span>
+                {e && e.total > 0 && (
+                  <span className={`map-pips ${left ? 'justify-end' : ''}`} aria-hidden>
+                    {Array.from({ length: e.total }, (_, i) => (
+                      <span key={i} className={`h-1 w-2 rounded-sm ${i < e.reached ? 'bg-amber' : 'bg-edge'}`} />
+                    ))}
+                  </span>
+                )}
               </span>
             </button>
           )
@@ -177,6 +196,14 @@ export function LobbyMap({
                 {shown.party.min === shown.party.max ? `${shown.party.min}명` : `${shown.party.min}~${shown.party.max}명`}
               </dd>
             </div>
+            {shown.endings && shown.endings.total > 0 && (
+              <div>
+                <dt className="inline">닿아 본 엔딩 </dt>
+                <dd className={`inline ${shown.endings.reached >= shown.endings.total ? 'text-amber' : 'text-fog'}`}>
+                  {shown.endings.reached}/{shown.endings.total}
+                </dd>
+              </div>
+            )}
             <div>
               <dt className="inline">지금 </dt>
               <dd className={`inline ${online >= shown.party.min && online <= shown.party.max ? 'text-gain' : 'text-amber'}`}>

@@ -27,18 +27,25 @@ export interface Member {
 type Result<T> = { ok: true; value: T } | { ok: false; error: string }
 
 /** 대기실에서 고를 수 있는 것들: 플레이할 수 있는 시나리오 */
-export function lobbyModes(): LobbyModeInfo[] {
-  return playableScenarios.map((s, i) => ({
-    id: s.id,
-    code: s.code,
-    name: s.name,
-    blurb: s.blurb,
-    type: s.type,
-    party: s.party ?? { min: 1, max: MAX_PLAYERS },
-    // 지도 위치를 정하지 않은 시나리오는 겹치지 않게 가로로 흩어 둔다
-    map: s.map ?? { x: 20 + ((i * 23) % 60), y: 40 },
-  }))
+export function lobbyModes(endingLog: EndingLog = {}): LobbyModeInfo[] {
+  return playableScenarios.map((s, i) => {
+    const endings = s.nodes.filter((n) => n.kind === 'ending')
+    return {
+      id: s.id,
+      code: s.code,
+      name: s.name,
+      blurb: s.blurb,
+      type: s.type,
+      party: s.party ?? { min: 1, max: MAX_PLAYERS },
+      // 지도 위치를 정하지 않은 시나리오는 겹치지 않게 가로로 흩어 둔다
+      map: s.map ?? { x: 20 + ((i * 23) % 60), y: 40 },
+      endings: { reached: endings.filter((n) => (endingLog[s.id]?.[n.id] ?? 0) > 0).length, total: endings.length },
+    }
+  })
 }
+
+/** 대상(시나리오 id)마다, 이 방에서 닿아 본 엔딩(엔딩 id)과 닿은 횟수. 대기실로 돌아가도 남는다. */
+type EndingLog = Record<string, Record<string, number>>
 
 export class Room {
   readonly code: string
@@ -51,6 +58,8 @@ export class Room {
   lastActivity = Date.now()
 
   private reading = new Set<string>()
+  /** 이 방에서 닿아 본 엔딩. 한 판의 기록(`ScenarioGame.endings`)은 대기실로 돌아가면 사라지므로 여기에 모아 지도에 보인다. */
+  private endingLog: EndingLog = {}
   private sceneKey = ''
   private nextId = 1
   /** 지금까지 시작한 판의 수. 같은 방에서 새 판을 할 때마다 늘어난다. */
@@ -237,7 +246,15 @@ export class Room {
     return s ? `${s.runNo}|${s.run.nodeId}|${s.run.phase}` : ''
   }
 
+  private noteEndings(): void {
+    const g = this.sgame
+    if (!g) return
+    const log = (this.endingLog[g.scenarioId] ??= {})
+    for (const [id, n] of Object.entries(g.endings)) log[id] = Math.max(log[id] ?? 0, n)
+  }
+
   private noteScene(): void {
+    this.noteEndings()
     // 장면이 바뀌면 "읽는 중"은 처음부터 다시 센다 (각 클라이언트가 새 장면에서 다시 알린다)
     const key = this.keyOf()
     if (key !== this.sceneKey) {
@@ -348,7 +365,7 @@ export class Room {
       hostId: this.hostId,
       members: this.members.map((x) => ({ id: x.id, name: x.name, online: !!x.send, archetype: x.archetype })),
       mode: this.mode,
-      modes: lobbyModes(),
+      modes: lobbyModes(this.endingLog),
     }
   }
 

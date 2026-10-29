@@ -4,6 +4,7 @@ import { actionState, currentNode, findStep, openVoteChoices, personalOptionStat
 import { evalCond, evalText } from './logic.ts'
 import type { Change, PrivateResult, RunPhase, ScenarioGame, ScenarioResult } from './state.ts'
 import { isPanicked, STAT_LABEL, type Stats } from './stats.ts'
+import type { EndingFxName } from './fx.ts'
 import type { Effect, EndingTier, HintDef, ItemDef, Scenario } from './types.ts'
 
 export interface DossierView {
@@ -134,6 +135,8 @@ export interface EndingView {
   title: string
   text: string
   tier: EndingTier
+  /** 이 엔딩에만 붙는 화면 연출 (없으면 null) */
+  fx: EndingFxName | null
   /** 이번에 처음 닿은 엔딩인지 */
   first: boolean
 }
@@ -327,6 +330,7 @@ export function viewForScenario(sc: Scenario, g: ScenarioGame, playerId: string)
       title: node.title ?? node.id,
       text: evalText(node.text, ctx),
       tier: node.tier,
+      fx: node.fx ?? null,
       first: (g.endings[node.id] ?? 0) === 1,
     }
   }

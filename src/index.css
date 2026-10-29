@@ -372,6 +372,64 @@ body {
   color: var(--color-glow);
   text-shadow: 0 0 8px rgb(169 191 223 / 0.3);
 }
+/* 메아리: 다 찍힌 뒤 같은 글자가 한 번 더 오른쪽으로 번지며 따라 나오고, 잠시 쉬고 되풀이된다 (글은 data-t에서 복사한다) */
+.fx-echo {
+  position: relative;
+  display: inline-block;
+}
+.fx-echo.fx-done::after {
+  content: attr(data-t);
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--color-glow);
+  opacity: 0;
+  pointer-events: none;
+  animation: fx-echo 3.4s ease-out 0.7s infinite;
+}
+@keyframes fx-echo {
+  0% { opacity: 0.6; transform: translateX(0) scale(1); filter: blur(0); }
+  60%, 100% { opacity: 0; transform: translateX(0.8em) scale(1.1); filter: blur(2px); }
+}
+/* 거울상: 다 찍히면 좌우가 뒤집힌 같은 글자가 바로 뒤에 비친다 (자리는 처음부터 잡아 둬서 글이 밀리지 않는다) */
+.fx-mirror {
+  color: var(--color-bone);
+}
+.fx-mirror::after {
+  content: attr(data-t);
+  display: inline-block;
+  margin-left: 0.4em;
+  color: var(--color-glow);
+  transform: scaleX(-1);
+  filter: blur(0.4px);
+  opacity: 0;
+}
+.fx-mirror.fx-done::after {
+  opacity: 0.34;
+  animation: fx-mirror-in 1.4s ease-out both;
+}
+@keyframes fx-mirror-in {
+  from { opacity: 0; filter: blur(3px); }
+}
+/* 검은 줄: 글자가 가려져 있다. 읽는 사람의 정신력이 낮아지면(번짐이 시작되면) 줄이 걷히고 붉게 읽힌다 */
+.fx-redact {
+  padding: 0 0.12em;
+  border-radius: 2px;
+  color: transparent;
+  background: #000;
+  outline: 1px solid rgb(140 130 118 / 0.3);
+  text-shadow: none;
+  user-select: none;
+  transition:
+    background-color 1.2s ease,
+    color 1.2s ease,
+    outline-color 1.2s ease;
+}
+.fx-redact.fx-open {
+  color: var(--color-loss);
+  background: transparent;
+  outline-color: transparent;
+}
 /*
  * 정신력이 낮을 때 본문이 번지고 갈라진다. `--distort`(0~1)가 클수록 번짐이 짙고,
  * 붉은/푸른 겹그림자가 더 벌어지고, 어긋나는 간격이 짧아진다.
@@ -451,8 +509,16 @@ body {
   .fx-shake,
   .fx-flicker,
   .text-distort,
-  .glyph-warp {
+  .glyph-warp,
+  .fx-echo.fx-done::after,
+  .fx-mirror.fx-done::after {
     animation: none;
+  }
+  .fx-echo.fx-done::after {
+    display: none;
+  }
+  .fx-redact {
+    transition: none;
   }
 }
 
@@ -874,5 +940,236 @@ main button:not(:disabled):active {
   }
   main button:not(:disabled):active {
     transform: none;
+  }
+}
+
+/* ───────── 엔딩 하나에만 붙는 연출 (EndingParty.tsx, 엔딩 노드의 `fx`) ───────── */
+
+.end-card {
+  position: relative;
+  border: 1px solid var(--color-edge);
+  background: rgb(21 18 19 / 0.7);
+  padding: 0.5rem 0.65rem;
+  border-radius: 0.25rem;
+  text-align: left;
+}
+
+/* phantom: 파티 수가 하나 늘어난다. 없던 한 명이 늦게, 서서히 나타나고 머리글의 인원 수가 바뀐다. */
+.phantom-count-old {
+  display: inline-block;
+  animation: phantom-old 1s ease-in 3.6s both;
+}
+.phantom-count-new {
+  position: absolute;
+  left: 0;
+  right: 0;
+  opacity: 0;
+  color: var(--color-loss);
+  animation: phantom-new 1.4s ease-out 4s both;
+}
+@keyframes phantom-old {
+  to { opacity: 0; filter: blur(3px); }
+}
+@keyframes phantom-new {
+  0% { opacity: 0; filter: blur(4px); letter-spacing: 0.3em; }
+  100% { opacity: 1; filter: none; letter-spacing: normal; }
+}
+.end-ghost {
+  border-color: rgb(212 72 63 / 0.4);
+  background: rgb(60 14 12 / 0.35);
+  opacity: 0;
+  animation:
+    ghost-in 3.2s ease-out 4.2s both,
+    fx-flicker 3.4s steps(1, end) 7.4s infinite;
+}
+@keyframes ghost-in {
+  0% { opacity: 0; transform: translateY(6px); filter: blur(6px); }
+  35% { opacity: 0.25; }
+  100% { opacity: 1; transform: none; filter: none; }
+}
+.ghost-name {
+  display: inline-block;
+  min-width: 3.5em;
+  border-bottom: 1px solid rgb(212 72 63 / 0.6);
+  color: transparent;
+  user-select: none;
+}
+
+/* tally: 파티 카드가 진열된 상품처럼 정리되고, 정신력이 동전처럼 떨어진다. 카드마다 차례(--i)로 정산된다. */
+.end-party-tally {
+  border-radius: 0.25rem;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 calc(100% / 4 - 1px), rgb(163 180 198 / 0.08) calc(100% / 4 - 1px) calc(100% / 4)),
+    linear-gradient(rgb(26 40 64 / 0.35), transparent 70%);
+  padding: 0.6rem;
+}
+.end-slot {
+  border-top-width: 3px;
+  border-top-color: rgb(163 180 198 / 0.45);
+  background: rgb(14 20 32 / 0.6);
+  animation: slot-in 0.8s ease-out calc(0.4s + var(--i, 0) * 0.25s) both;
+}
+@keyframes slot-in {
+  from { opacity: 0; transform: translateY(-10px); }
+}
+.slot-bar {
+  height: 100%;
+  width: var(--pct, 0%);
+  border-radius: 0.125rem;
+  background: #8a93de;
+  animation: slot-drain 2s ease-in calc(1.6s + var(--i, 0) * 0.45s) forwards;
+}
+@keyframes slot-drain {
+  to { width: 0%; background: #c0524a; }
+}
+.slot-price-old {
+  animation: phantom-old 0.6s ease-in calc(3.2s + var(--i, 0) * 0.45s) both;
+}
+.slot-price-done {
+  position: absolute;
+  right: 0.65rem;
+  opacity: 0;
+  color: var(--color-amber);
+  animation: slot-done 0.8s ease-out calc(3.4s + var(--i, 0) * 0.45s) both;
+}
+@keyframes slot-done {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+.slot-coin {
+  position: absolute;
+  bottom: 0.9rem;
+  left: calc(25% + var(--c, 0) * 18%);
+  color: var(--color-amber);
+  font-size: 0.7rem;
+  opacity: 0;
+  pointer-events: none;
+  animation: coin-fall 1.1s ease-in calc(2.4s + var(--i, 0) * 0.45s + var(--c, 0) * 0.3s) both;
+}
+@keyframes coin-fall {
+  0% { opacity: 0; transform: translateY(-4px); }
+  15% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(2.2rem) rotate(240deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .phantom-count-old,
+  .phantom-count-new,
+  .end-ghost,
+  .end-slot,
+  .slot-bar,
+  .slot-price-old,
+  .slot-price-done {
+    animation: none;
+  }
+  .phantom-count-old { display: none; }
+  .phantom-count-new { position: static; opacity: 1; }
+  .end-ghost { opacity: 1; }
+  .slot-bar { width: 0%; }
+  .slot-price-old { display: none; }
+  .slot-price-done { position: static; opacity: 1; }
+  .slot-coin { display: none; }
+}
+
+/* ───────── 낮밤 막간 카드·암전 손전등·파티 카드 불안 표시 (ScenarioScreen, parts.tsx) ───────── */
+
+/* 하루가 바뀔 때 잠깐 지나가는 막간: 클릭을 가로채지 않고 스스로 사라진다 */
+.interlude {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  pointer-events: none;
+  text-align: center;
+  animation: interlude 2.8s ease-in-out both;
+}
+.interlude-day {
+  background: radial-gradient(ellipse at center, rgb(42 30 14 / 0.86), rgb(12 10 11 / 0.6) 80%);
+}
+.interlude-night {
+  background: radial-gradient(ellipse at center, rgb(8 12 26 / 0.9), rgb(6 5 6 / 0.66) 80%);
+}
+.interlude-title {
+  font-family: var(--font-serif-kr);
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  animation: title-in 1.4s ease-out both;
+}
+.interlude-sub {
+  max-width: 22rem;
+  color: var(--color-ash);
+  font-size: 0.85rem;
+  animation: rise 0.8s ease-out 0.9s both;
+}
+@keyframes interlude {
+  0% { opacity: 0; }
+  20% { opacity: 1; }
+  72% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* 암전 직전: 커서(손가락) 주변만 보인다. --tx/--ty는 포인터 위치, --torch-r은 빛의 반지름 (손전등이 있으면 넓다) */
+.torch {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  background: radial-gradient(
+    circle var(--torch-r, 150px) at var(--tx, 50%) var(--ty, 38%),
+    transparent 0,
+    transparent 38%,
+    rgb(0 0 0 / 0.84) 100%
+  );
+  animation: torch-in 1.8s ease-out both;
+}
+@keyframes torch-in {
+  from { opacity: 0; }
+}
+
+/* 정신력이 낮은 파티원의 카드: 다른 사람 화면에서도 불안해 보인다 */
+.card-uneasy .party-name {
+  animation: name-blur 5s ease-in-out infinite;
+}
+.card-shaky {
+  animation: card-tremble 0.28s linear infinite alternate;
+}
+.card-shaky .party-name {
+  animation: name-blur 2.4s ease-in-out infinite;
+  color: var(--color-loss);
+}
+@keyframes name-blur {
+  0%, 70%, 100% { filter: none; opacity: 1; }
+  78% { filter: blur(1.4px); opacity: 0.6; }
+  86% { filter: none; opacity: 1; }
+  92% { filter: blur(0.8px); opacity: 0.75; }
+}
+@keyframes card-tremble {
+  from { transform: translate(-0.5px, 0.3px); }
+  to { transform: translate(0.5px, -0.3px); }
+}
+
+/* 대기실 지도: 닿아 본 엔딩 칸 */
+.map-pips {
+  display: flex;
+  gap: 2px;
+  margin-top: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .interlude {
+    display: none;
+  }
+  .torch {
+    animation: none;
+  }
+  .card-uneasy .party-name,
+  .card-shaky,
+  .card-shaky .party-name {
+    animation: none;
   }
 }

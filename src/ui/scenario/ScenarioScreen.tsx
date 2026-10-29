@@ -4,7 +4,7 @@ import { stripFx } from '../../scenario/fx.ts'
 import { needMoreChoiceIds, type ScenarioView } from '../../scenario/view.ts'
 import { Backdrop } from '../backdrop/Backdrop.tsx'
 import { ReadingContext, type ScenarioClient } from '../client.ts'
-import { FxSettingsMenu, playSfx, useMusic, type BgmId } from '../fx.tsx'
+import { FxSettingsMenu, playSfx, useFx, useMood, useMusic, type BgmId } from '../fx.tsx'
 import { DistortContext, distortAt } from '../Narration.tsx'
 import { loadJournal, pruneJournals, saveJournal, type JournalEntry } from '../storage.ts'
 import { BoardStrip } from './Board.tsx'
@@ -139,6 +139,33 @@ export function ScenarioScreen({
     lastPeriod.current = period
   }, [period])
 
+  // 낮밤이나 날짜가 바뀌는 순간의 막간 카드: "☾ 2일째 밤". 조명이 그때 한 단계 어두워졌으면 상태 문장이 같이 나온다.
+  // 처음 열 때, 새 판으로 시간이 되돌아갈 때, 엔딩, 연출을 끈 설정(즉시)에서는 나오지 않는다.
+  const { speed, torch } = useFx()
+  const day = view.timeOfDay?.day ?? null
+  const timeKey = view.timeOfDay ? `${day ?? 0}|${period}` : ''
+  const lastTime = useRef({ run: view.runNo, key: timeKey, level: lightLevel })
+  const [interlude, setInterlude] = useState<{ id: number; night: boolean; title: string; sub: string | null } | null>(null)
+  useEffect(() => {
+    const prev = lastTime.current
+    lastTime.current = { run: view.runNo, key: timeKey, level: lightLevel }
+    if (!timeKey || !prev.key || prev.run !== view.runNo || prev.key === timeKey) return
+    if (view.phase === 'ended' || speed === 0) return
+    const isNight = period === 'night'
+    const dimmed = view.light && lightLevel > prev.level
+    setInterlude({
+      id: Date.now(),
+      night: isNight,
+      title: `${isNight ? '☾' : '☀'} ${day !== null ? `${day}일째 ` : ''}${isNight ? '밤' : '낮'}`,
+      sub: dimmed ? `${view.light?.name ? `${view.light.name}: ` : ''}${view.clockLabel}` : null,
+    })
+  }, [timeKey, view.runNo, lightLevel, view.phase, speed, period, day, view.light, view.clockLabel])
+  useEffect(() => {
+    if (!interlude) return
+    const t = setTimeout(() => setInterlude(null), 2800)
+    return () => clearTimeout(t)
+  }, [interlude])
+
   // 정보 패널을 여닫는 소리
   const drawerOpen = drawer !== null
   const lastDrawer = useRef(drawerOpen)
@@ -161,6 +188,26 @@ export function ScenarioScreen({
   // 배경음: 엔딩 > 조명이 많이 어두움 > 밤 > 낮 (파일이 없는 곡은 조용하다)
   const track: BgmId = ended ? 'ending' : darkness >= 0.5 ? 'dark' : night ? 'night' : 'day'
   useMusic(track)
+  // 조명이 어두울수록 합성 배경음의 음정이 어긋나고, 내 정신력이 낮을수록 모든 소리가 먹먹해지고 심장 박동이 깔린다
+  useMood(darkness, mySanity)
+
+  // 암전 직전(조명이 한 단계 남았을 때): 커서(손가락) 주변만 보인다. 빛을 비추는 아이템이 있으면 빛이 넓다.
+  const torchOn = torch && !ended && !!view.light && view.light.level > 0 && view.light.max - view.light.level <= 1
+  const hasLamp = view.me.items.some((i) => i.light)
+  const torchRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!torchOn) return
+    const move = (e: PointerEvent) => {
+      torchRef.current?.style.setProperty('--tx', `${e.clientX}px`)
+      torchRef.current?.style.setProperty('--ty', `${e.clientY}px`)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerdown', move)
+    return () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerdown', move)
+    }
+  }, [torchOn])
   const sceneKey = `${view.runNo}-${view.time}-${view.phase}-${view.scene?.title ?? ''}-${view.scene?.text.length ?? 0}`
   const resultKey = `${view.runNo}-${view.result?.nodeId}-${view.time}`
 
@@ -209,6 +256,20 @@ export function ScenarioScreen({
       )}
       {blink > 0 && <div key={blink} className="light-blink" aria-hidden />}
       {impact && <div key={impact.id} className={`impact impact-${impact.kind}`} aria-hidden />}
+      {torchOn && (
+        <div
+          ref={torchRef}
+          className="torch"
+          style={{ '--torch-r': hasLamp ? '270px' : '150px' } as React.CSSProperties}
+          aria-hidden
+        />
+      )}
+      {interlude && (
+        <div key={interlude.id} className={`interlude ${interlude.night ? 'interlude-night' : 'interlude-day'}`} aria-hidden>
+          <p className={`interlude-title ${interlude.night ? 'text-glow' : 'text-amber'}`}>{interlude.title}</p>
+          {interlude.sub && <p className="interlude-sub">{interlude.sub}</p>}
+        </div>
+      )}
 
       {/* 위쪽 막대: 스크롤해도 항상 보인다. 연출 막(비네트·밤 색조)보다 위, 정보 패널보다 아래에 둔다. */}
       <nav

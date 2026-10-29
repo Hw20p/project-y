@@ -188,6 +188,7 @@ export function Typed({
   seq,
   spans,
   glitch = 0,
+  open = false,
 }: {
   text: string
   step: number
@@ -195,6 +196,8 @@ export function Typed({
   spans?: FxSpan[]
   /** 글자 하나가 일그러질 확률 */
   glitch?: number
+  /** 읽는 사람의 정신이 흔들려서 가려진 글자(`redact`)가 읽히는지 */
+  open?: boolean
 }) {
   if (seq.i < step) return <span className="invisible">{text}</span>
   const n = seq.i > step ? text.length : seq.c
@@ -222,8 +225,13 @@ export function Typed({
     <>
       {segs.map((sg, i) => {
         const shown = Math.max(0, Math.min(sg.t.length, n - sg.at))
+        // 메아리·거울상은 자기 글자를 복사해 따라 붙으므로 글을 속성으로 건넨다 (다 찍힌 뒤에만 나타난다)
+        const copies = sg.fx === 'echo' || sg.fx === 'mirror'
+        const cls = sg.fx
+          ? `fx-${sg.fx}${copies && shown >= sg.t.length ? ' fx-done' : ''}${sg.fx === 'redact' && open ? ' fx-open' : ''}`
+          : undefined
         return (
-          <span key={i} className={sg.fx ? `fx-${sg.fx}` : undefined}>
+          <span key={i} className={cls} data-t={copies ? sg.t : undefined}>
             <span>
               <Glyphs text={sg.t.slice(0, shown)} from={sg.at} seed={seed} glitch={glitch} />
             </span>
@@ -308,7 +316,14 @@ export function Beats({
       {beats.map((b, i) => (
         <span key={i}>
           {b.para && <span className="mt-3 block" />}
-          <Typed text={b.text} spans={b.spans} step={at[`${prefix}${i}`]} seq={seq} glitch={distort.glitch} />
+          <Typed
+            text={b.text}
+            spans={b.spans}
+            step={at[`${prefix}${i}`]}
+            seq={seq}
+            glitch={distort.glitch}
+            open={ctx.level > 0}
+          />
           {i < beats.length - 1 && !beats[i + 1].para && ' '}
         </span>
       ))}

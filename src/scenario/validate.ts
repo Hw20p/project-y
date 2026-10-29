@@ -2,7 +2,7 @@
 // (모든 길을 실제로 돌려 보는 전수 탐색은 다음 단계에서 `explore`로 추가한다.)
 import { STAT_KEYS, STAT_MAX, type Archetype } from './stats.ts'
 import type { Cond, Effect, PersonalNode, Route, Scenario, Target, Text } from './types.ts'
-import { FX_NAMES, fxNamesIn, stripFx } from './fx.ts'
+import { ENDING_FX_NAMES, FX_NAMES, fxNamesIn, stripFx } from './fx.ts'
 
 export interface ValidationReport {
   errors: string[]
@@ -253,6 +253,7 @@ export function validateScenario(sc: Scenario): ValidationReport {
 
     if (n.kind === 'ending') {
       text(n.text, SCENE_TEXT, `${where} 글`)
+      if (n.fx && !(ENDING_FX_NAMES as readonly string[]).includes(n.fx)) at(where, `알 수 없는 엔딩 연출 "${n.fx}"`)
       continue
     }
     if (n.kind === 'story') {

@@ -1287,6 +1287,7 @@ const STORY_NODES: Node[] = [
     id: 'bad-end',
     kind: 'ending',
     tier: 'bad',
+    fx: 'tally',
     title: '정산되지 않은 거래',
     text: [
       {
@@ -1409,7 +1410,7 @@ export const vending: Scenario = {
     { id: 'coin', name: '낡은 동전', text: '가장자리가 닳은 동전. 언제부터 주머니에 있었는지 기억나지 않는다.' },
     { id: 'photo', name: '가족사진', text: '지갑에서 늘 꺼내 보던 사진. 모서리가 접혀 있다.' },
     { id: 'badge', name: '사원증', text: '이름과 얼굴이 박힌 플라스틱 카드. 이게 없으면 이 건물에서 아무도 아닌 사람이 된다.' },
-    { id: 'flash', name: '소형 플래시', text: '손바닥만 한 플래시. 좁은 틈 안쪽까지 비춘다.' },
+    { id: 'flash', name: '소형 플래시', text: '손바닥만 한 플래시. 좁은 틈 안쪽까지 비춘다.', light: true },
     { id: 'glove', name: '절연 장갑', text: '두꺼운 고무 장갑. 전선을 만져도 손끝이 저리지 않는다.' },
     { id: 'tongs', name: '집게', text: '끝이 반질반질 닳은 긴 집게. 손을 대지 않고 동전을 집을 수 있다.' },
   ],
