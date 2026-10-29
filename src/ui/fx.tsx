@@ -19,7 +19,7 @@ interface FxSettings {
 }
 
 const KEY = 'project-y:fx'
-const DEFAULTS: FxSettings = { speed: 1, sound: false, volume: 0.7, warp: true, torch: true }
+const DEFAULTS: FxSettings = { speed: 1, sound: true, volume: 0.7, warp: true, torch: true }
 
 function load(): FxSettings {
   try {
