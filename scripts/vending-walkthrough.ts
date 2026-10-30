@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict'
 import { vending as sc, wiringOf, yesterdayOf, type ButtonId, type ItemId, type WiresId } from '../src/content/scenarios/vending.ts'
 import { createScenarioGame, reduceScenario, type ScenarioAction } from '../src/scenario/game.ts'
+import { evalText } from '../src/scenario/logic.ts'
 import { partyOf } from '../src/scenario/registry.ts'
 import type { ScenarioGame } from '../src/scenario/state.ts'
 import { validateScenario } from '../src/scenario/validate.ts'
@@ -163,6 +164,26 @@ function trade(g: ScenarioGame, put: string, press: string, change: string): Sce
         games++
       }
   console.log(`통과: 의도한 풀이로 진엔딩 (${games}판: 1·2·4·8명 × 과제 순서 6, 받는 것·버튼·전선 모든 경우)`)
+}
+
+// 1-b) 정답이 늘 같은 보기(받는 것의 규칙·방향, 거스름돈)는 판마다 다른 말로 나오지만(`wording` a·b·c) 보기 id와 정답은 그대로다
+{
+  const VARIED = new Set(['rule-cycle', 'rule-random', 'rule-same', 'rule-price', 'rule-mood', 'dir-up', 'dir-down', 'dir-mine', 'dir-alpha', 'take', 'again', 'cover', 'leave'])
+  for (const id of ['rule-cycle', 'dir-up', 'leave']) {
+    const node = sc.nodes.find((n) => n.kind === 'vote' && n.choices.some((c) => c.id === id))
+    assert.ok(node && node.kind === 'vote', `추리 장면 (${id})`)
+    for (const w of ['a', 'b', 'c']) {
+      const texts: string[] = node.choices.map((c): string => evalText(c.text, { run: { vars: { wording: w }, players: [] } as never }))
+      assert.ok(texts.every((t) => t.length > 0), `wording=${w}: 모든 보기에 문구가 있다 (${id})`)
+      assert.equal(new Set(texts).size, texts.length, `wording=${w}: 보기 문구가 서로 다르다 (${id})`)
+    }
+    // (거스름돈의 추리 장면에는 "패스" 같은 고정 문구의 선택지도 있어서, 말투가 바뀌는 보기만 본다)
+    for (const c of node.choices.filter((x) => VARIED.has(x.id))) {
+      const said = ['a', 'b', 'c'].map((w) => evalText(c.text, { run: { vars: { wording: w }, players: [] } as never }))
+      assert.equal(new Set(said).size, 3, `보기 ${c.id}의 문구는 세 가지로 달라진다`)
+    }
+  }
+  console.log('통과: 받는 것·거스름돈 보기 문구 변형 (판마다 다른 말, 같은 뜻)')
 }
 
 // 2) 받는 것(순서형): 순서가 한 바퀴 돌고, 어제의 기록에서 한 칸 뒤가 오늘이다
