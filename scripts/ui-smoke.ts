@@ -105,6 +105,35 @@ try {
     assert.match(tally, /A-02/)
     assert.match(tally, /정산 완료/)
     console.log('통과: 엔딩 연출(한 명이 더·정산)')
+
+    // 엔딩 뒤 회고: 요약(며칠째·의문·단서·놓친 곳)과 사람별 활약도·칭호
+    const { EndingRecapPanel } = await vite.ssrLoadModule('/src/ui/scenario/EndingRecap.tsx')
+    const zero = { clues: 0, firsts: 0, items: 0, probes: 0, hurt: 0, sanityLost: 0 }
+    const recapHtml = render(
+      h(EndingRecapPanel as never, {
+        meId: 'p1',
+        recap: {
+          days: 3,
+          clues: 7,
+          questions: { solved: 2, total: 3 },
+          probes: { taken: 5, missed: 4 },
+          players: [
+            { id: 'p1', name: '가', archetype: 'researcher', ...zero, clues: 4, firsts: 3, probes: 3, score: 23, share: 0.7, title: { name: '첫 발견자', desc: '설명' } },
+            { id: 'p2', name: '나', archetype: 'field', ...zero, score: 0, share: 0.3, title: null },
+          ],
+        },
+      }),
+    )
+    assert.match(recapHtml, /이번 판 회고/)
+    assert.match(recapHtml, /3일째에 끝났다/)
+    assert.match(recapHtml, /의문 2\/3 풀림/)
+    assert.match(recapHtml, /알아낸 단서 7개/)
+    assert.match(recapHtml, /아무도 살피지 않은 곳이 4곳/)
+    assert.match(recapHtml, /첫 발견자/)
+    assert.match(recapHtml, /활약 70%/)
+    assert.match(recapHtml, /단서 4 \(먼저 3\)/)
+    assert.match(recapHtml, /눈에 띄는 기록이 없다/, '기록이 없는 사람도 에러 없이 그려진다')
+    console.log('통과: 엔딩 뒤 회고 화면')
   }
 
   // 4) 시나리오 화면: B7 로비를 두 사람이 끝까지 진행하며, 장면 종류·개인 단계·결과·엔딩마다 화면이 에러 없이 그려지는지 본다

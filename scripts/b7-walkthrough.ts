@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict'
 import { b7Lobby as sc, SOFA_NOTES, STAIR_CLUES, type SeatId, type StairsCount } from '../src/content/scenarios/b7-lobby.ts'
 import { createScenarioGame, reduceScenario, type ScenarioAction } from '../src/scenario/game.ts'
+import { evalText } from '../src/scenario/logic.ts'
 import { partyOf } from '../src/scenario/registry.ts'
 import type { ScenarioGame } from '../src/scenario/state.ts'
 import { validateScenario } from '../src/scenario/validate.ts'
@@ -126,12 +127,35 @@ const endingOf = (g: ScenarioGame) => toEnd(g).run.endingId
           assert.deepEqual(view(g).light, { max: 4, level: 1 }, '3일째이므로 조명은 한 번 어두워졌다 (2일째에 어두워졌다)')
           assert.equal(endingOf(g), 'true-end')
           assert.equal(view(toEnd(g)).ending?.tier, 'true')
+          // 엔딩 뒤 회고: 사람마다 활약 기록이 있고, 단서는 개수만 알려 준다
+          const recap = view(toEnd(g)).ending?.recap
+          assert.equal(recap?.players.length, n, '회고에 모든 파티원이 있다')
+          assert.ok(recap!.probes.missed > 0, '이 풀이는 조사에서 아무도 살피지 않고 기다렸으므로, 열려 있던 곳이 그대로 남는다')
           games++
         }
       }
     }
   }
   console.log(`통과: 의도한 풀이로 진엔딩 (${games}판: 2·3·5·8명 × 과제 순서 6 × 소파 3 × 계단 3)`)
+}
+
+// 1-b) 엘리베이터 추리 사슬의 보기는 판마다 다른 말로 나오지만(`wording` a·b·c) 보기 id와 정답은 그대로다
+{
+  for (const id of chainRight('lift', 'a', 9)) {
+    const node = sc.nodes.find((n) => n.kind === 'vote' && n.choices.some((c) => c.id === id))
+    assert.ok(node && node.kind === 'vote', `엘리베이터 추리 장면 (${id})`)
+    for (const w of ['a', 'b', 'c']) {
+      const run = { vars: { wording: w }, players: [] } as never
+      const texts: string[] = node.choices.map((c): string => evalText(c.text, { run }))
+      assert.ok(texts.every((t) => t.length > 0), `wording=${w}: 모든 보기에 문구가 있다 (${id})`)
+      assert.equal(new Set(texts).size, texts.length, `wording=${w}: 보기 문구가 서로 다르다 (${id})`)
+    }
+    for (const c of node.choices) {
+      const said = ['a', 'b', 'c'].map((w) => evalText(c.text, { run: { vars: { wording: w }, players: [] } as never }))
+      assert.equal(new Set(said).size, 3, `보기 ${c.id}의 문구는 세 가지로 달라진다`)
+    }
+  }
+  console.log('통과: 엘리베이터 보기 문구 변형 (판마다 다른 말, 같은 뜻)')
 }
 
 // 2) 과제 사이에는 사건과 밤이 있다: 첫 과제 뒤 발소리 → 밤, 둘째 과제 뒤 전화 → 밤, 셋째 과제 뒤 바로 마지막 선택

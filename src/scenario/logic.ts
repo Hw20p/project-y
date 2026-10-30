@@ -1,4 +1,5 @@
 // 조건·글·길·효과를 평가한다. 난수를 쓰지 않는다.
+import { creditOf } from './recap.ts'
 import type { Change, RunPlayer, RunState, ScenarioGame } from './state.ts'
 import { clampStat, isPanicked } from './stats.ts'
 import type { Cond, Effect, Route, Target, Text, Who } from './types.ts'
@@ -114,6 +115,7 @@ export function applyEffects(game: ScenarioGame, effects: Effect[] | undefined, 
         if (!p.items.includes(e.give)) {
           p.items.push(e.give)
           changes.push({ kind: 'item', playerId: p.id, id: e.give, gained: true })
+          if (e.to !== 'all') creditOf(run, p.id).items += 1 // 전원에게 일어난 일은 활약으로 세지 않는다
         }
       }
     } else if ('take' in e) {
@@ -126,8 +128,15 @@ export function applyEffects(game: ScenarioGame, effects: Effect[] | undefined, 
     } else if ('learn' in e) {
       for (const p of targets(game, e.to, ctx)) {
         if (!p.facts.includes(e.learn)) {
+          // 파티에서 아무도 모르던 단서를 알아냈으면 "가장 먼저"로 센다 (활약 기록)
+          const first = !run.players.some((q) => q.facts.includes(e.learn))
           p.facts.push(e.learn)
           changes.push({ kind: 'fact', playerId: p.id, id: e.learn })
+          if (e.to !== 'all') {
+            const credit = creditOf(run, p.id)
+            credit.clues += 1
+            if (first) credit.firsts += 1
+          }
         }
       }
     } else if ('hurt' in e) {
@@ -135,6 +144,7 @@ export function applyEffects(game: ScenarioGame, effects: Effect[] | undefined, 
         if (!p.hurt) {
           p.hurt = true
           changes.push({ kind: 'hurt', playerId: p.id })
+          if (e.hurt !== 'all') creditOf(run, p.id).hurt += 1
         }
       }
     } else if ('heal' in e) {
@@ -150,6 +160,7 @@ export function applyEffects(game: ScenarioGame, effects: Effect[] | undefined, 
         p.stats[e.stat] = clampStat(e.stat, before + e.add)
         const amount = p.stats[e.stat] - before
         if (amount !== 0) changes.push({ kind: 'stat', playerId: p.id, stat: e.stat, amount })
+        if (e.stat === 'sanity' && amount < 0 && e.to !== 'all') creditOf(run, p.id).sanityLost += -amount
       }
     } else if ('time' in e) {
       run.time += e.time

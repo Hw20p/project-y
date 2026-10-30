@@ -144,6 +144,14 @@ function firstOf(cases: [Cond, string][], fallback: string, base?: Cond): { text
   return [...pieces, { text: fallback, when: allOf(...pre, ...earlier.map(not)) }]
 }
 
+/**
+ * 같은 뜻의 말을 판마다 다르게 보인다: 판이 시작될 때 시드로 뽑힌 `wording`(a·b·c)에 맞는 문구 하나만 나온다.
+ * 보기의 **문구로 정답을 외워 두는 것**을 막으려는 장치다 — 뜻과 정답은 그대로이고, 판마다 말투와 고르는 말이 달라진다.
+ * 추리 사슬의 보기에 쓴다 (엘리베이터). 정답과 오답을 모두 바꿔야 "아는 문구를 지우고 남는 것"으로 맞힐 수 없다.
+ */
+const WORDINGS = ['a', 'b', 'c'] as const
+const say = (a: string, b: string, c: string): Text => [a, b, c].map((text, i) => ({ text, when: { var: 'wording', is: WORDINGS[i] } }))
+
 /** 틀린 보기의 이야기: 고른 말, 일어난 일, 그리고 시도가 끝났다는 알림 */
 const miss = (said: string, what: string): string => `${said}\n${what}\n추리는 여기서 끝났다.`
 
@@ -159,22 +167,26 @@ function liftChain(): ChainStep[] {
     {
       question: '추리를 시작한다. 먼저, 층 버튼을 누르면 어떻게 되는가?',
       options: [
-        { id: 'press-back', text: '누른 층에 가지 못하고 B7로 되돌아온다', right: true },
+        {
+          id: 'press-back',
+          text: say('누른 층에 가지 못하고 B7로 되돌아온다', 'B7로 돌아와 멈춘다 — 누른 층에는 닿지 못한다', '어느 층을 눌러도 처음 있던 B7로 돌려보내진다'),
+          right: true,
+        },
         {
           id: 'press-below',
-          text: '누른 층의 바로 아래에서 멈춘다',
+          text: say('누른 층의 바로 아래에서 멈춘다', '누른 층보다 한 층 아래에 닿아 문이 열린다', '목적지 직전인 아래층에서 멎는다'),
           right: false,
           wrong: miss('“누른 층의 바로 아래에서 멈춘다.” 층 표시등을 지켜보았다.', '표시등은 어느 층에서도 멈추지 않았다. 숫자가 [[shake|제멋대로]] 흘렀다.'),
         },
         {
           id: 'press-up',
-          text: '누른 층까지 올라간다',
+          text: say('누른 층까지 올라간다', '눌렀던 층에 무사히 닿는다', '버튼대로 그 층까지 올라가 문이 열린다'),
           right: false,
           wrong: miss('“누른 층까지 올라간다.” 층 버튼에 손을 뻗었다.', '버튼에 불이 들어오자 문 안쪽에서 낮은 진동이 일었다. 기대한 대로 되지 않았다.'),
         },
         {
           id: 'press-mirror',
-          text: '누른 층에 닿지만 거울 속 일행이 한 명 늘어난다',
+          text: say('누른 층에 닿지만 거울 속 일행이 한 명 늘어난다', '눌렀던 층에는 도착하지만 거울에 비친 사람이 하나 더 는다', '목적지에 닿는 대신 거울 속 일행의 수가 달라진다'),
           right: false,
           wrong: miss('“도착하지만 거울이 달라진다.” 거울에서 눈을 떼지 않고 버튼을 눌렀다.', '거울은 변하지 않았다. 대신 일행의 숨소리가 한 박자 늦게 들렸다.'),
         },
@@ -192,22 +204,26 @@ function liftChain(): ChainStep[] {
     {
       question: '거울 같은 문은 어떻게 해야 하는가?',
       options: [
-        { id: 'mirror-skip', text: '거울은 보지 않는다 — 곁눈으로도 훑지 않는다', right: true },
+        {
+          id: 'mirror-skip',
+          text: say('거울은 보지 않는다 — 곁눈으로도 훑지 않는다', '거울 쪽으로는 눈을 주지 않는다 — 흘깃 보는 것도 하지 않는다', '문의 거울을 아예 외면한다 — 곁눈질도 하지 않는다'),
+          right: true,
+        },
         {
           id: 'mirror-side',
-          text: '정면으로는 보지 않고 곁눈으로만 훑는다',
+          text: say('정면으로는 보지 않고 곁눈으로만 훑는다', '똑바로는 안 보되 흘깃흘깃 곁눈으로 살핀다', '정면은 피하고 눈꼬리로만 거울을 확인한다'),
           right: false,
           wrong: miss('“곁눈으로만 보면 괜찮다.” 거울을 비스듬히 훑었다.', '비친 일행 사이에서 누군가 천천히 고개를 돌렸다. [[shake|눈이 마주쳤다.]]'),
         },
         {
           id: 'mirror-count',
-          text: '거울로 일행의 수를 확인한다',
+          text: say('거울로 일행의 수를 확인한다', '거울에 비친 일행을 세어 인원을 맞춰 본다', '비친 모습으로 일행이 다 있는지 헤아려 본다'),
           right: false,
           wrong: miss('“거울로 확인하자.” 비친 일행을 한 명씩 세어 보았다.', '[[shake|하나가 더 있었다.]] 비친 사람은 이쪽을 보고 있지 않았다. 확인할수록 틀어진다.'),
         },
         {
           id: 'mirror-talk',
-          text: '거울 속의 사람에게 말을 걸어 본다',
+          text: say('거울 속의 사람에게 말을 걸어 본다', '거울에 비친 누군가에게 먼저 말을 건넨다', '거울 속 상대를 불러 대답을 기다려 본다'),
           right: false,
           wrong: miss('“말을 걸어 보자.” 거울 앞에서 낮게 불러 보았다.', '거울 속의 누군가가 입 모양으로 같은 말을 따라 했다. [[shake|소리 없이, 한 박자 늦게.]] 아무도 두 번 부르지 못했다.'),
         },
@@ -224,22 +240,26 @@ function liftChain(): ChainStep[] {
     {
       question: '그렇다면 문 앞에서 무엇을 해야 위로 올라가는가?',
       options: [
-        { id: 'wait-still', text: '아무것도 건드리지 않고 가만히 기다린다', right: true },
+        {
+          id: 'wait-still',
+          text: say('아무것도 건드리지 않고 가만히 기다린다', '손대지 않고 문 앞에서 조용히 서 있는다', '아무 데도 누르지 않은 채 그대로 기다린다'),
+          right: true,
+        },
         {
           id: 'wait-split',
-          text: '한 명이 먼저 눌러 보고, 나머지는 따라간다',
+          text: say('한 명이 먼저 눌러 보고, 나머지는 따라간다', '대표로 한 사람이 버튼을 눌러 보고 나머지는 뒤따른다', '한 사람이 시험 삼아 누르면 나머지가 이어서 탄다'),
           right: false,
           wrong: miss('“한 명이 먼저 누르고 나머지가 따라가자.” 한 사람이 버튼을 눌렀다.', '일행이 갈라졌다. 누른 사람은 로비로 돌아왔고 나머지는 한 칸 올라가다 멈췄다.'),
         },
         {
           id: 'wait-rush',
-          text: '문이 닫히기 전에 서둘러 모두 탄다',
+          text: say('문이 닫히기 전에 서둘러 모두 탄다', '문이 닫히기 전에 다 같이 얼른 안으로 들어간다', '닫히기 전에 일행 모두 서둘러 올라탄다'),
           right: false,
           wrong: miss('“서둘러 타자.” 모두 문 안으로 뛰어들었다.', '문은 열린 채 그대로였다. 거친 숨소리가 거울 속에서 [[shake|두 배로]] 들렸다.'),
         },
         {
           id: 'wait-count',
-          text: '일행의 수를 소리 내어 센다',
+          text: say('일행의 수를 소리 내어 센다', '일행이 모두 있는지 큰 소리로 하나씩 센다', '인원수를 소리 내어 확인한다'),
           right: false,
           wrong: miss('“인원을 소리 내어 세어 보자.” 한 명씩 숫자를 불렀다.', '숫자가 하나 더 불려 나왔다. 아무도 그 목소리를 낸 적이 없었다.'),
         },
@@ -256,31 +276,51 @@ function liftChain(): ChainStep[] {
       ),
     },
     {
-      question: questionWith('종합한다. 이 엘리베이터를 어떻게 해야 위로 올라가는가?', [
-        ['lift-no-once', '버튼을 한 번만 가볍게 누른다'],
-        ['lift-no-mirror', '거울로 일행의 수를 확인한다'],
-        ['lift-no-top', '가장 높은 층(B1) 버튼을 끝까지 누른다'],
-      ]),
+      // 이미 아니라고 밝혀진 보기는 이번 판에 보이는 문구(`wording`)와 같은 말로 덧붙인다
+      question: [
+        { text: '종합한다. 이 엘리베이터를 어떻게 해야 위로 올라가는가?' },
+        ...(
+          [
+            ['lift-no-once', '버튼을 한 번만 가볍게 누른다', '버튼을 딱 한 번만 살짝 누른다', '버튼 하나를 가볍게 한 번 누른다'],
+            ['lift-no-mirror', '거울로 일행의 수를 확인한다', '거울로 일행 수를 헤아린다', '거울로 인원을 확인한다'],
+            ['lift-no-top', '가장 높은 층(B1) 버튼을 끝까지 누른다', '가장 위층인 B1 버튼을 꾹 눌러 둔다', '맨 위층 B1 버튼을 끝까지 꾹 누른다'],
+          ] as const
+        ).flatMap(([fact, ...labels]) =>
+          labels.map((label, i) => ({ text: `\n(이미 아니라고 밝혀졌다: ${label})`, when: allOf(knows(fact), { var: 'wording', is: WORDINGS[i] }) })),
+        ),
+      ],
       options: [
         {
           id: 'once',
-          text: '거울은 보지 않고, 층 버튼을 한 번만 가볍게 누른다',
+          text: say('거울은 보지 않고, 층 버튼을 한 번만 가볍게 누른다', '거울을 외면한 채, 층 버튼을 딱 한 번만 살짝 누른다', '거울은 안 보고, 버튼 하나를 가볍게 한 번 누른다'),
           right: false,
           wrong:
             '층 버튼 하나를 눌렀다. 표시등이 거꾸로 내려가더니 B7에서 멈췄다. 되돌아온 것이다.\n한 번이든 여러 번이든, 누르면 돌아오는 모양이다.',
           wrongFact: 'lift-no-once',
         },
-        { id: 'still', text: '버튼은 누르지 않고, 거울도 보지 않은 채 문이 닫히기를 기다린다', right: true },
+        {
+          id: 'still',
+          text: say(
+            '버튼은 누르지 않고, 거울도 보지 않은 채 문이 닫히기를 기다린다',
+            '버튼에 손대지 않고, 거울도 외면한 채 문이 닫히길 기다린다',
+            '아무 버튼도 누르지 않고 거울도 보지 않으며 문이 닫히기만 기다린다',
+          ),
+          right: true,
+        },
         {
           id: 'mirror',
-          text: '버튼은 누르지 않고, 거울로 일행의 수를 확인한 뒤 기다린다',
+          text: say(
+            '버튼은 누르지 않고, 거울로 일행의 수를 확인한 뒤 기다린다',
+            '버튼은 건드리지 않되, 거울로 일행 수를 헤아린 다음 기다린다',
+            '아무 버튼도 누르지 않지만 거울로 인원을 확인하고 기다린다',
+          ),
           right: false,
           wrong: '거울 속에서 일행을 한 명씩 세어 보았다. [[shake|하나가 더 있었다.]] 그 사람은 이쪽을 보고 있지 않았다.\n눈을 돌린 뒤에도 한참 동안 시선이 따가웠다.',
           wrongFact: 'lift-no-mirror',
         },
         {
           id: 'top',
-          text: '거울은 보지 않고, 가장 높은 층(B1) 버튼을 끝까지 누른다',
+          text: say('거울은 보지 않고, 가장 높은 층(B1) 버튼을 끝까지 누른다', '거울을 외면한 채, 가장 위층인 B1 버튼을 꾹 눌러 둔다', '거울은 안 보고, 맨 위층 B1 버튼을 끝까지 꾹 누른다'),
           right: false,
           wrong: 'B1 버튼에 불이 들어왔다. 엘리베이터는 한참을 내려가더니 같은 로비에 같은 소리로 문이 열렸다.\n어느 층을 누르든 돌아오는 것이다.',
           wrongFact: 'lift-no-top',
@@ -1844,7 +1884,14 @@ export const b7Lobby: Scenario = {
     goal: '조명이 완전히 꺼지기 전에, 일행 모두가 이 층을 무사히 벗어날 방법을 찾아낸다.',
     questions: built.questions,
   },
-  vars: [...built.vars, { id: 'seat', pick: ['a', 'b', 'c'] }, { id: 'stairs', pick: [...STAIRS] }, { id: 'events', pick: [...EVENT_ORDERS] }],
+  vars: [
+    ...built.vars,
+    { id: 'seat', pick: ['a', 'b', 'c'] },
+    { id: 'stairs', pick: [...STAIRS] },
+    { id: 'events', pick: [...EVENT_ORDERS] },
+    // 추리 사슬 보기의 문구 (뜻은 같다). `say`를 보라.
+    { id: 'wording', pick: [...WORDINGS] },
+  ],
   // 밤이 지나 새 낮이 오면(성공이든 실패든) 시계가 하루 흐른다. 2일째·4일째·6일째에 조명이 한 단계씩 어두워지고, 여드레째에는 암전이다.
   clock: { labels: ['조명이 환하다', '조명이 깜빡인다', '조명이 흐려진다', '조명이 어둡다', '조명이 꺼졌다'], light: true, per: 2, byDay: true },
   deadline: { time: 7, node: 'bad-end' },

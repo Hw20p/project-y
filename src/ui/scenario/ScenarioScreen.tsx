@@ -187,7 +187,9 @@ export function ScenarioScreen({
   const night = view.timeOfDay?.period === 'night'
   // 배경음: 엔딩 > 조명이 많이 어두움 > 밤 > 낮 (파일이 없는 곡은 조용하다)
   const track: BgmId = ended ? 'ending' : darkness >= 0.5 ? 'dark' : night ? 'night' : 'day'
-  useMusic(track)
+  // 합성 배경음의 결: 엔딩은 등급별, 그 밖에는 장면의 장소별 (곡 파일이 있으면 쓰이지 않는다)
+  const flavor = ended && view.ending ? `ending/${view.ending.tier}` : view.backdrop ? `${view.scenario.id}/${view.backdrop.place}` : undefined
+  useMusic(track, flavor)
   // 조명이 어두울수록 합성 배경음의 음정이 어긋나고, 내 정신력이 낮을수록 모든 소리가 먹먹해지고 심장 박동이 깔린다
   useMood(darkness, mySanity)
 

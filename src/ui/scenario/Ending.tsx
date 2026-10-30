@@ -5,6 +5,7 @@ import { playSfx } from '../fx.tsx'
 import { Appear, Beats, beatSteps, DistortContext, splitBeats, useAdvanceKey, useSequence, useSteps, type StepSpec } from '../Narration.tsx'
 import { ENDING_DISTORT } from './EndingFx.tsx'
 import { EndingParty } from './EndingParty.tsx'
+import { EndingRecapPanel } from './EndingRecap.tsx'
 
 const TIER_LABEL: Record<EndingTier, string> = { true: '진엔딩', good: '좋은 엔딩', neutral: '보통 엔딩', bad: '나쁜 엔딩' }
 const TIER_CLASS: Record<EndingTier, string> = {
@@ -29,8 +30,15 @@ export function ScenarioEnding({
 
   const beats = useMemo(() => splitBeats(ending.text), [ending.text])
   const fx = ending.fx
+  const recap = ending.recap
   const { steps, at } = useSteps(
-    [['title', 0, 1600], ...(fx ? [['party', 0, 900] as StepSpec] : []), ...beatSteps(beats), ['record', 0, 800]],
+    [
+      ['title', 0, 1600],
+      ...(fx ? [['party', 0, 900] as StepSpec] : []),
+      ...beatSteps(beats),
+      ...(recap ? [['recap', 0, 700] as StepSpec] : []),
+      ['record', 0, 800],
+    ],
     [ending.id, fx],
   )
   const seq = useSequence(steps)
@@ -64,6 +72,12 @@ export function ScenarioEnding({
       <DistortContext value={ENDING_DISTORT[ending.tier]}>
         <Beats beats={beats} at={at} seq={seq} className="mx-auto mt-8 max-w-xl text-left font-serif-kr leading-9 text-fog" />
       </DistortContext>
+
+      {recap && (
+        <Appear step={at.recap} seq={seq} className="mx-auto mt-8 max-w-xl text-left">
+          <EndingRecapPanel recap={recap} meId={view.me.id} />
+        </Appear>
+      )}
 
       <Appear step={at.record} seq={seq} className="mx-auto mt-8 max-w-xl text-left">
         <p className="text-xs text-ash">

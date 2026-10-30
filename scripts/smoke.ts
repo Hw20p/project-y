@@ -9,6 +9,8 @@ import {
   type ScenarioAction,
 } from '../src/scenario/game.ts'
 import { demo } from '../src/scenario/fixtures/demo.ts'
+import { applyEffects } from '../src/scenario/logic.ts'
+import { buildRecap } from '../src/scenario/recap.ts'
 import type { ScenarioGame } from '../src/scenario/state.ts'
 import type { Scenario } from '../src/scenario/types.ts'
 import { validateScenario } from '../src/scenario/validate.ts'
@@ -307,4 +309,48 @@ function seedWithCode(code: string): number {
   assert.equal(g.run.players[0].hurt, true, '다음 장면에 들어오며 적용되었다')
   assert.deepEqual(viewForScenario(later, g, 'b').aftermath, [{ kind: 'hurt', playerId: 'a' }], '모두에게 여파로 보인다')
   console.log('통과: 나중에 적용되는 효과(분할 장면·picked 대상)')
+}
+
+// 11) 엔딩 뒤 회고: 활약 기록은 직접 한 행동에서만 쌓이고(전원에게 일어난 일은 안 센다), 칭호는 혼자 가장 앞선 사람에게만 붙는다
+{
+  const g = createScenarioGame(demo, { seed: 1, players: two })
+  applyEffects(g, [{ learn: 'note', to: 'actor' }, { give: 'lamp', to: 'actor' }], { actor: 'a' })
+  applyEffects(g, [{ learn: 'note', to: 'actor' }], { actor: 'b' }) // 이미 a가 알던 단서라 b는 "먼저"가 아니다
+  applyEffects(g, [{ learn: 'shared', to: 'all' }, { hurt: 'all' }, { stat: 'sanity', add: -2, to: 'all' }]) // 전원에게 일어난 일
+  applyEffects(g, [{ stat: 'sanity', add: -2, to: 'actor' }, { hurt: 'actor' }], { actor: 'b' })
+  const credit = g.run.recap!.credit
+  assert.deepEqual(credit.a, { clues: 1, firsts: 1, items: 1, probes: 0, hurt: 0, sanityLost: 0 })
+  assert.deepEqual(credit.b, { clues: 1, firsts: 0, items: 0, probes: 0, hurt: 0, sanityLost: 2 }, 'b는 이미 다친 몸이라 부상이 또 세지지 않는다')
+
+  const run = {
+    players: [
+      { id: 'a', name: '가', archetype: 'rookie' },
+      { id: 'b', name: '나', archetype: 'rookie' },
+      { id: 'c', name: '다', archetype: 'rookie' },
+    ],
+    recap: {
+      credit: {
+        a: { clues: 4, firsts: 3, items: 0, probes: 5, hurt: 0, sanityLost: 0 },
+        b: { clues: 1, firsts: 0, items: 1, probes: 2, hurt: 1, sanityLost: 3 },
+      },
+      probes: { 'x/1': 1, 'x/2': 1, 'x/3': 0 },
+    },
+  } as never
+  const r = buildRecap(run)
+  assert.deepEqual(r.probes, { taken: 2, missed: 1 })
+  assert.deepEqual(r.players.map((p) => p.title?.name ?? null), ['첫 발견자', '개척자', null], '앞선 사람에게 칭호가 하나씩, 기록이 없는 사람에게는 없다')
+  assert.ok(Math.abs(r.players.reduce((s, p) => s + p.share, 0) - 1) < 1e-9, '활약 비율의 합은 1이다')
+  assert.ok(r.players[0].share > r.players[1].share && r.players[1].share > r.players[2].share)
+  assert.equal(r.players[2].score, 0, '기록이 없으면 0이다 (기록 자체가 없어도 에러 없이 처리된다)')
+
+  // 동률이면 칭호를 주지 않고, 혼자일 때는 비교할 사람이 없어 칭호가 없다
+  const tie = buildRecap({
+    players: [{ id: 'a', name: '가', archetype: 'rookie' }, { id: 'b', name: '나', archetype: 'rookie' }],
+    recap: { credit: { a: { clues: 2, firsts: 2, items: 0, probes: 0, hurt: 0, sanityLost: 0 }, b: { clues: 2, firsts: 2, items: 0, probes: 0, hurt: 0, sanityLost: 0 } }, probes: {} },
+  } as never)
+  assert.deepEqual(tie.players.map((p) => p.title), [null, null])
+  const solo = buildRecap({ players: [{ id: 'a', name: '가', archetype: 'rookie' }], recap: { credit: { a: { clues: 3, firsts: 3, items: 0, probes: 1, hurt: 0, sanityLost: 0 } }, probes: {} } } as never)
+  assert.equal(solo.players[0].title, null)
+  assert.equal(solo.players[0].share, 1)
+  console.log('통과: 엔딩 뒤 회고(활약 기록·칭호·비율)')
 }

@@ -68,11 +68,11 @@ export function FxProvider({ children }: { children: ReactNode }) {
 }
 
 /** 이 화면이 보이는 동안 깔릴 배경음 (`null`이면 조용하게). 화면이 사라지면 서서히 꺼진다. */
-export function useMusic(id: BgmId | null): void {
+export function useMusic(id: BgmId | null, flavor?: string): void {
   useEffect(() => {
-    setMusic(id)
+    setMusic(id, flavor)
     return () => setMusic(null)
-  }, [id])
+  }, [id, flavor])
 }
 
 /**

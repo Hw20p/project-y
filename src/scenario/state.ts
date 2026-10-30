@@ -94,6 +94,32 @@ export interface ScenarioResult {
   next: string
 }
 
+/**
+ * 한 사람이 이번 판에서 쌓은 활약 기록 (엔딩 뒤 회고용). **전원에게 일어난 일(`to: 'all'`)은 세지 않는다** —
+ * 그 사람이 직접 한 행동(조사·개인 행동)에서 얻거나 치른 것만 센다.
+ */
+export interface Credit {
+  /** 직접 알아낸 단서 수 */
+  clues: number
+  /** 그중 파티에서 가장 먼저 알아낸 것 */
+  firsts: number
+  /** 직접 얻은 아이템 수 */
+  items: number
+  /** 살핀 곳(조사로 고른 행동) 수 */
+  probes: number
+  /** 몸으로 치른 대가: 다친 횟수 */
+  hurt: number
+  /** 몸으로 치른 대가: 잃은 정신력 */
+  sanityLost: number
+}
+
+/** 이번 판의 회고 자료. 규칙에는 쓰이지 않고 상태 키에도 들어가지 않는다 (전수 탐색의 상태 수를 늘리지 않는다). */
+export interface RunRecap {
+  credit: Record<string, Credit>
+  /** 조사로 열려 있던 곳(`<장면 id>/<행동 id>`) → 누군가 살폈으면 1, 열려만 있었으면 0 */
+  probes: Record<string, 0 | 1>
+}
+
 export interface RunState {
   seed: number
   /** 이번 판에서 뽑힌 값 (암호·열쇠 위치 등) */
@@ -129,6 +155,8 @@ export interface RunState {
   endingId: string | null
   /** 이번 판에서 지나온 장면 (기록·분석용) */
   visited: string[]
+  /** 엔딩 뒤 회고용 활약 기록 (처음 쌓일 때 만들어진다) */
+  recap?: RunRecap
 }
 
 export interface ScenarioGame {

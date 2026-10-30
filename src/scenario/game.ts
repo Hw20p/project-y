@@ -2,6 +2,7 @@
 // 판정에 난수가 없다: 같은 시드(= 같은 무작위 값)와 같은 행동이면 항상 같은 결과다.
 // 규칙에 맞지 않는 행동은 에러 없이 같은 상태를 돌려준다(무시) — 서버가 그대로 받아 넘길 수 있게.
 import { createRng } from './rng.ts'
+import { creditOf, recapOf } from './recap.ts'
 import { applyEffects, evalCond, evalRoute, evalText } from './logic.ts'
 import type { Change, PersonalProgress, PrivateResult, RunPlayer, ScenarioGame, ScenarioResult } from './state.ts'
 import { findArchetype, isPanicked } from './stats.ts'
@@ -490,6 +491,17 @@ function resolveSplit(sc: Scenario, g: ScenarioGame, node: SplitNode): void {
     )
     return { player: p, finding }
   })
+  // 회고용 기록: 조사로 열려 있던 곳과 살핀 곳. 비공개 발견이 있는 행동만 "살필 곳"이다 ("지켜본다" 같은 행동은 세지 않는다).
+  const probeLog = recapOf(run).probes
+  for (const a of node.actions) {
+    if (!node.private?.some((f) => f.action === a.id)) continue
+    if (run.players.some((p) => actionOpenFor(g, a, p).open)) probeLog[`${node.id}/${a.id}`] ??= 0
+  }
+  for (const { player, finding } of found) {
+    if (!finding) continue
+    probeLog[`${node.id}/${picks[player.id]}`] = 1
+    creditOf(run, player.id).probes += 1
+  }
   const privateChanges = new Map<string, ReturnType<typeof applyEffects>>()
   for (const { player, finding } of found) {
     if (finding) {

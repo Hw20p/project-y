@@ -5,6 +5,7 @@ import { evalCond, evalText } from './logic.ts'
 import type { Change, PrivateResult, RunPhase, ScenarioGame, ScenarioResult } from './state.ts'
 import { isPanicked, STAT_LABEL, type Stats } from './stats.ts'
 import type { EndingFxName } from './fx.ts'
+import { buildRecap, type RecapView } from './recap.ts'
 import type { Effect, EndingTier, HintDef, ItemDef, Scenario } from './types.ts'
 
 export interface DossierView {
@@ -139,6 +140,17 @@ export interface EndingView {
   fx: EndingFxName | null
   /** 이번에 처음 닿은 엔딩인지 */
   first: boolean
+  /** 이번 판의 회고 (사람별 활약도, 놓친 곳). 단서의 내용은 담기지 않는다. */
+  recap: EndingRecap | null
+}
+
+export interface EndingRecap extends RecapView {
+  /** 며칠째에 끝났는지 (낮밤이 없는 시나리오는 null) */
+  days: number | null
+  /** 파티가 알아낸 단서 수 */
+  clues: number
+  /** 조사 보드의 의문: 풀린 수와 전체 (보드가 없는 시나리오는 null) */
+  questions: { solved: number; total: number } | null
 }
 
 export interface ScenarioView {
@@ -332,6 +344,7 @@ export function viewForScenario(sc: Scenario, g: ScenarioGame, playerId: string)
       tier: node.tier,
       fx: node.fx ?? null,
       first: (g.endings[node.id] ?? 0) === 1,
+      recap: null, // 아래에서 단서·보드가 정해진 뒤 채운다
     }
   }
 
@@ -392,6 +405,16 @@ export function viewForScenario(sc: Scenario, g: ScenarioGame, playerId: string)
       period = p
     }
     timeOfDay = { day: sc.nodes.some((n) => n.period === 'day') ? day : null, period }
+  }
+
+  // ───── 엔딩 뒤 회고: 활약 기록에 며칠째에 끝났는지, 풀린 의문, 알아낸 단서 수를 더한다
+  if (ending) {
+    ending.recap = {
+      ...buildRecap(run),
+      days: timeOfDay?.day ?? null,
+      clues: clues.length,
+      questions: board ? { solved: board.questions.filter((q) => q.solved).length, total: board.questions.length } : null,
+    }
   }
 
   // ───── 배경: 지나온 장면을 따라가며 장소와 어둠(정전)을 이어받는다 (비운 장면은 앞의 것 그대로)
